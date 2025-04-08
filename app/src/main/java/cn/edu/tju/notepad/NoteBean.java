@@ -1,4 +1,4 @@
-package cn.edu.jssvc.notepad;
+package cn.edu.tju.notepad;
 
 import java.io.Serializable;
 

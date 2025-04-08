@@ -1,4 +1,4 @@
-package cn.edu.jssvc.notepad;
+package cn.edu.tju.notepad;
 
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -9,20 +9,16 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.Toast;
 
-import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
-
-import com.google.android.material.button.MaterialButtonToggleGroup;
 
 import java.util.Date;
 
+import cn.edu.jssvc.notepad.R;
+
 public class NoteActivity extends AppCompatActivity {
     private EditText editTextTitle,editTextContent;
-    NoteDbHelper noteDbHelper;
+    NoteDbHelper noteDbHelper;  // 数据库
     private NoteBean noteBean;
 
     @Override
@@ -36,8 +32,10 @@ public class NoteActivity extends AppCompatActivity {
 
         Intent intent = getIntent();
         String comeFrom = intent.getStringExtra("ComeFrom");
+        assert comeFrom != null;
         if (comeFrom.equals("NoteAdapter")){
             noteBean = (NoteBean) intent.getSerializableExtra("NoteBean");
+            assert noteBean != null;
             editTextTitle.setText(noteBean.getTitle());
             editTextContent.setText(noteBean.getContent());
         }

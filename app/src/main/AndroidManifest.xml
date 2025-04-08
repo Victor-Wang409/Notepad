@@ -13,10 +13,10 @@
         android:theme="@style/Theme.Notepad"
         tools:targetApi="31">
         <activity
-            android:name=".NoteActivity"
+            android:name="cn.edu.tju.notepad.NoteActivity"
             android:exported="false" />
         <activity
-            android:name=".MainActivity"
+            android:name="cn.edu.tju.notepad.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

@@ -1,76 +1,96 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context="cn.edu.tju.notepad.NoteActivity">
+    android:orientation="vertical"
+    tools:context=".NoteActivity">
 
-    <TextView
-        android:id="@+id/textView2"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="#673AB7"
-        android:gravity="center"
-        android:text="信息"
-        android:textColor="#FEFAFD"
-        android:textSize="34sp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@android:color/holo_purple"
+        android:orientation="horizontal">
 
-    <EditText
-        android:id="@+id/editTextTitle"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginEnd="8dp"
-        android:ems="10"
-        android:hint="请输入标题"
-        android:inputType="text"
-        android:minHeight="48dp"
-        android:paddingStart="5dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/textView2" />
+        <ImageView
+            android:id="@+id/imageViewBack"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:src="@android:drawable/ic_menu_revert"
+            android:contentDescription="返回" />
 
-    <EditText
-        android:id="@+id/editTextContent"
-        android:layout_width="0dp"
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="添加/修改笔记"
+            android:textColor="@android:color/white"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/buttonCommit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:layout_marginEnd="10dp"
+            android:text="提交"
+            android:textColor="@android:color/white" />
+
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginBottom="16dp"
-        android:background="#F2FDFF"
-        android:ems="10"
-        android:gravity="top"
-        android:hint="请输入内容"
-        android:inputType="text"
-        android:paddingStart="5dp"
-        app:layout_constraintBottom_toTopOf="@+id/buttonCommit"
-        app:layout_constraintEnd_toEndOf="@+id/editTextTitle"
-        app:layout_constraintStart_toStartOf="@+id/editTextTitle"
-        app:layout_constraintTop_toBottomOf="@+id/editTextTitle" />
+        android:layout_weight="1">
 
-    <Button
-        android:id="@+id/buttonCommit"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="16dp"
-        android:text="发布"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
 
-    <ImageView
-        android:id="@+id/imageViewBack"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        app:layout_constraintBottom_toBottomOf="@+id/textView2"
-        app:layout_constraintStart_toStartOf="@+id/textView2"
-        app:layout_constraintTop_toTopOf="parent"
-        app:srcCompat="@drawable/baseline_chevron_left_24" />
+            <EditText
+                android:id="@+id/editTextTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@android:drawable/editbox_background"
+                android:hint="请输入标题"
+                android:padding="10dp"
+                android:textSize="16sp" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+            <EditText
+                android:id="@+id/editTextContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:background="@android:drawable/editbox_background"
+                android:gravity="start|top"
+                android:hint="请输入内容"
+                android:minHeight="200dp"
+                android:padding="10dp"
+                android:textSize="16sp" />
+
+            <!-- 图片容器 -->
+            <LinearLayout
+                android:id="@+id/imageContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="vertical" />
+
+            <!-- 添加图片按钮 -->
+            <Button
+                android:id="@+id/btnAddImage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="上传图片" />
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

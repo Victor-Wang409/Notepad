@@ -154,10 +154,10 @@ public class MainActivity extends AppCompatActivity {
 
             if (actionState == ItemTouchHelper.ACTION_STATE_SWIPE) {
                 // 滑动删除状态 - 显示红色背景
-
                 // 计算透明度 - 滑动距离越大，透明度越低
                 float alpha = 1.0f - Math.abs(dX) / (float) itemView.getWidth();
-
+//                float alpha = 1.0f;
+//
                 // 设置透明度
                 itemView.setAlpha(alpha);
 
@@ -177,13 +177,12 @@ public class MainActivity extends AppCompatActivity {
                 c.drawRoundRect(rectF, cornerRadius, cornerRadius, backgroundPaint);
 
             } else if (actionState == ItemTouchHelper.ACTION_STATE_DRAG && isCurrentlyActive) {
-                // 拖拽状态 - 显示红色边框
-
+                // 拖拽状态 - 显示蓝色边框
                 // 创建带圆角的矩形区域
                 RectF rectF = new RectF(itemView.getLeft(), itemView.getTop(),
                         itemView.getRight(), itemView.getBottom());
 
-                // 绘制圆角红色
+                // 绘制蓝色圆角
                 borderPaint.setColor(Color.BLUE);
                 c.drawRoundRect(rectF, cornerRadius, cornerRadius, borderPaint);
             }

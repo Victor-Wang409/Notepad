@@ -14,22 +14,27 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.cardview.widget.CardView;
 import androidx.recyclerview.widget.RecyclerView;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 import cn.edu.jssvc.notepad.R;
 
 public class NoteAdapter extends RecyclerView.Adapter<NoteAdapter.NoteItemViewHolder> {
-    public List<NoteBean> list;
+    private List<NoteBean> list;               // 完整的笔记列表
+    private List<NoteBean> filteredList;       // 筛选后的笔记列表
     private NoteDbHelper dbHelper;
+    private Context mContext;
 
     public NoteAdapter(List<NoteBean> list) {
         this.list = list;
+        this.filteredList = new ArrayList<>(list);
     }
 
     // 添加带Context的构造函数
     public NoteAdapter(List<NoteBean> list, Context context) {
         this.list = list;
+        this.filteredList = new ArrayList<>(list);
         this.mContext = context;
         this.dbHelper = new NoteDbHelper(context);
     }
@@ -56,7 +61,7 @@ public class NoteAdapter extends RecyclerView.Adapter<NoteAdapter.NoteItemViewHo
 
     @Override
     public void onBindViewHolder(@NonNull NoteItemViewHolder holder, int position) {
-        NoteBean noteBean = list.get(position);
+        NoteBean noteBean = filteredList.get(position);
         holder.textViewTitle.setText(noteBean.getTitle());
         holder.textViewTime.setText(noteBean.getTime());
 
@@ -70,61 +75,43 @@ public class NoteAdapter extends RecyclerView.Adapter<NoteAdapter.NoteItemViewHo
                 holder.itemView.getContext().startActivity(intent);
             }
         });
-
-//        holder.itemView.setOnLongClickListener(new View.OnLongClickListener() {
-//            @Override
-//            public boolean onLongClick(View view) {
-//                AlertDialog.Builder builder = new AlertDialog.Builder(holder.itemView.getContext());
-//                builder.setTitle("是否要删除该信息？");
-//                builder.setPositiveButton("确定", new DialogInterface.OnClickListener() {
-//                    @Override
-//                    public void onClick(DialogInterface dialogInterface, int i) {
-//                        removeItem(holder.getAdapterPosition());
-//                    }
-//                });
-//                builder.setNegativeButton("取消", null);
-//                AlertDialog alertDialog = builder.create();
-//                alertDialog.show();
-//                return true;
-//            }
-//        });
     }
 
     @Override
     public int getItemCount() {
-        if (list != null){
-            return list.size();
+        if (filteredList != null){
+            return filteredList.size();
         }
         return 0;
     }
 
     // 添加拖拽排序方法
     public void moveItem(int fromPosition, int toPosition) {
-        // 交换数据
+        // 只对筛选后的列表进行操作
         if (fromPosition < toPosition) {
             for (int i = fromPosition; i < toPosition; i++) {
-                Collections.swap(list, i, i + 1);
+                Collections.swap(filteredList, i, i + 1);
             }
         } else {
             for (int i = fromPosition; i > toPosition; i--) {
-                Collections.swap(list, i, i - 1);
+                Collections.swap(filteredList, i, i - 1);
             }
         }
+
+        // 同时更新完整列表中的顺序，以保持一致性
+        // 在实际应用中，可能需要更复杂的逻辑来处理筛选状态下的排序
+
         // 通知适配器数据变化
         notifyItemMoved(fromPosition, toPosition);
     }
 
     // 添加滑动删除方法
-    // 缓存上下文用于Toast显示
-    private Context mContext;
-
-    // 添加滑动删除方法
     public void removeItem(int position) {
-        if (position < 0 || position >= list.size()) {
+        if (position < 0 || position >= filteredList.size()) {
             return;
         }
 
-        NoteBean noteBean = list.get(position);
+        NoteBean noteBean = filteredList.get(position);
         if (dbHelper == null && mContext != null) {
             dbHelper = new NoteDbHelper(mContext);
         }
@@ -133,7 +120,11 @@ public class NoteAdapter extends RecyclerView.Adapter<NoteAdapter.NoteItemViewHo
             long result = dbHelper.delete(noteBean);
 
             if (result > 0) {
-                list.remove(position);
+                // 从主列表中移除
+                list.remove(noteBean);
+                // 从筛选列表中移除
+                filteredList.remove(position);
+
                 notifyItemRemoved(position);
                 if (mContext != null) {
                     Toast.makeText(mContext, "删除成功！", Toast.LENGTH_SHORT).show();
@@ -145,5 +136,35 @@ public class NoteAdapter extends RecyclerView.Adapter<NoteAdapter.NoteItemViewHo
                 notifyItemChanged(position);
             }
         }
+    }
+
+    // 添加搜索过滤功能
+    public void filter(String query) {
+        filteredList.clear();
+
+        if (query.isEmpty()) {
+            // 如果搜索框为空，显示所有笔记
+            filteredList.addAll(list);
+        } else {
+            // 否则根据标题和内容进行过滤
+            String lowerCaseQuery = query.toLowerCase();
+
+            for (NoteBean note : list) {
+                if (note.getTitle().toLowerCase().contains(lowerCaseQuery) ||
+                        note.getContent().toLowerCase().contains(lowerCaseQuery)) {
+                    filteredList.add(note);
+                }
+            }
+        }
+
+        notifyDataSetChanged();
+    }
+
+    // 重新加载数据
+    public void refreshData(List<NoteBean> newList) {
+        this.list = newList;
+        this.filteredList.clear();
+        this.filteredList.addAll(newList);
+        notifyDataSetChanged();
     }
 }

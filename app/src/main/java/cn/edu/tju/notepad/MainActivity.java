@@ -6,10 +6,15 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
-import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.view.KeyEvent;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
+import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -19,13 +24,14 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.List;
-
-import cn.edu.jssvc.notepad.R;
+import cn.edu.tju.notepad.R;
 
 public class MainActivity extends AppCompatActivity {
     NoteDbHelper noteDbHelper;
     RecyclerView recyclerView;
     NoteAdapter noteAdapter;
+    EditText editTextSearch;
+    ImageView clearSearchIcon;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -34,6 +40,9 @@ public class MainActivity extends AppCompatActivity {
         noteDbHelper = new NoteDbHelper(MainActivity.this);
 
         recyclerView = findViewById(R.id.recycleView);
+        editTextSearch = findViewById(R.id.editTextSearch);
+        clearSearchIcon = findViewById(R.id.clearSearchIcon);
+        ImageView imageViewAdd = findViewById(R.id.imageViewAdd);
 
         LinearLayoutManager linearLayoutManager = new LinearLayoutManager(MainActivity.this);
         linearLayoutManager.setOrientation(RecyclerView.VERTICAL);
@@ -43,7 +52,6 @@ public class MainActivity extends AppCompatActivity {
         ItemTouchHelper itemTouchHelper = new ItemTouchHelper(new NoteItemTouchHelperCallback());
         itemTouchHelper.attachToRecyclerView(recyclerView);
 
-        ImageView imageViewAdd = findViewById(R.id.imageViewAdd);
 
         imageViewAdd.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -53,14 +61,86 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(intent);
             }
         });
+
+        // 初始化搜索功能
+        setupSearchFunctionality();
+    }
+
+    private void setupSearchFunctionality() {
+        // 添加文本变化监听器
+        editTextSearch.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                // 不需要实现
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                // 当文本改变时过滤结果
+                if (noteAdapter != null) {
+                    noteAdapter.filter(s.toString());
+                }
+
+                // 控制清除按钮的显示
+                if (s.length() > 0) {
+                    clearSearchIcon.setVisibility(View.VISIBLE);
+                } else {
+                    clearSearchIcon.setVisibility(View.GONE);
+                }
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                // 不需要实现
+            }
+        });
+
+        // 设置键盘搜索键监听器
+        editTextSearch.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                    // 执行搜索
+                    if (noteAdapter != null) {
+                        noteAdapter.filter(editTextSearch.getText().toString());
+                    }
+                    return true;
+                }
+                return false;
+            }
+        });
+
+        // 设置清除按钮点击事件
+        clearSearchIcon.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                editTextSearch.setText("");
+                clearSearchIcon.setVisibility(View.GONE);
+                // 清空搜索后显示所有内容
+                if (noteAdapter != null) {
+                    noteAdapter.filter("");
+                }
+            }
+        });
     }
 
     @Override
     protected void onStart() {
         super.onStart();
         List<NoteBean> list = noteDbHelper.query();
-        noteAdapter = new NoteAdapter(list, MainActivity.this);
-        recyclerView.setAdapter(noteAdapter);
+
+        if (noteAdapter == null) {
+            noteAdapter = new NoteAdapter(list, MainActivity.this);
+            recyclerView.setAdapter(noteAdapter);
+        } else {
+            // 刷新数据
+            noteAdapter.refreshData(list);
+        }
+
+        // 如果有搜索词，保持搜索状态
+        if (editTextSearch != null && editTextSearch.getText().length() > 0) {
+            noteAdapter.filter(editTextSearch.getText().toString());
+        }
     }
 
     // 实现ItemTouchHelper.Callback来处理滑动删除和拖拽排序

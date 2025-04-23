@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace 'cn.edu.jssvc.notepad'
+    namespace 'cn.edu.tju.notepad'
     compileSdk 34
 
     defaultConfig {
-        applicationId "cn.edu.jssvc.notepad"
+        applicationId "cn.edu.tju.notepad"
         minSdk 24
         targetSdk 34
         versionCode 1

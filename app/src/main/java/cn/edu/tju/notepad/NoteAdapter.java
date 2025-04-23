@@ -10,7 +10,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.cardview.widget.CardView;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -18,7 +17,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import cn.edu.jssvc.notepad.R;
+import cn.edu.tju.notepad.R;
 
 public class NoteAdapter extends RecyclerView.Adapter<NoteAdapter.NoteItemViewHolder> {
     private List<NoteBean> list;               // 完整的笔记列表
@@ -97,10 +96,6 @@ public class NoteAdapter extends RecyclerView.Adapter<NoteAdapter.NoteItemViewHo
                 Collections.swap(filteredList, i, i - 1);
             }
         }
-
-        // 同时更新完整列表中的顺序，以保持一致性
-        // 在实际应用中，可能需要更复杂的逻辑来处理筛选状态下的排序
-
         // 通知适配器数据变化
         notifyItemMoved(fromPosition, toPosition);
     }

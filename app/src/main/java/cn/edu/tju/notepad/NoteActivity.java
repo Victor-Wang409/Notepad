@@ -24,7 +24,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.io.File;
 import java.util.Date;
 
-import cn.edu.jssvc.notepad.R;
+import cn.edu.tju.notepad.R;
 
 public class NoteActivity extends AppCompatActivity {
     private EditText editTextTitle, editTextContent;
@@ -265,17 +265,5 @@ public class NoteActivity extends AppCompatActivity {
         }
     }
 
-//    // 添加权限说明方法
-//    private void showPermissionExplanation() {
-//        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-//        builder.setTitle("需要存储权限");
-//        builder.setMessage("应用需要存储权限才能选择和保存图片。请在设置中启用这些权限。");
-//        builder.setPositiveButton("确定", (dialog, which) -> {
-//            // 再次请求权限
-//            ImageUtils.checkStoragePermission(NoteActivity.this);
-//        });
-//        builder.setNegativeButton("取消", null);
-//        builder.show();
-//    }
 }
 

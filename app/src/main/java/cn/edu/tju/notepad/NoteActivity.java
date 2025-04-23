@@ -24,8 +24,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.io.File;
 import java.util.Date;
 
-import cn.edu.tju.notepad.R;
-
 public class NoteActivity extends AppCompatActivity {
     private EditText editTextTitle, editTextContent;
     private LinearLayout imageContainer;
@@ -39,13 +37,13 @@ public class NoteActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_note);
 
-        // 初始化视图
+        // Initialize views
         initViews();
 
-        // 设置数据
+        // Set up data
         setupData();
 
-        // 设置监听器
+        // Set up listeners
         setupListeners();
     }
 
@@ -58,26 +56,26 @@ public class NoteActivity extends AppCompatActivity {
     }
 
     private void setupData() {
-        // 获取传递的数据
+        // Get passed data
         Intent intent = getIntent();
         String comeFrom = intent.getStringExtra("ComeFrom");
         noteDbHelper = new NoteDbHelper(NoteActivity.this);
 
-        // 如果是编辑现有笔记
+        // If editing an existing note
         if (comeFrom != null && comeFrom.equals("NoteAdapter")) {
             noteBean = (NoteBean) intent.getSerializableExtra("NoteBean");
             if (noteBean != null) {
                 editTextTitle.setText(noteBean.getTitle());
                 editTextContent.setText(noteBean.getContent());
 
-                // 加载图片
+                // Load images
                 loadImages();
             }
         }
     }
 
     private void setupListeners() {
-        // 返回按钮
+        // Back button
         findViewById(R.id.imageViewBack).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -85,7 +83,7 @@ public class NoteActivity extends AppCompatActivity {
             }
         });
 
-        // 提交按钮
+        // Submit button
         Button buttonCommit = findViewById(R.id.buttonCommit);
         buttonCommit.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -94,7 +92,7 @@ public class NoteActivity extends AppCompatActivity {
             }
         });
 
-        // 添加图片按钮
+        // Add image button
         btnAddImage.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -104,7 +102,7 @@ public class NoteActivity extends AppCompatActivity {
     }
 
     private void saveNote() {
-        // 获取输入内容
+        // Get input content
         String title = editTextTitle.getText().toString().trim();
         String content = editTextContent.getText().toString().trim();
 
@@ -117,7 +115,7 @@ public class NoteActivity extends AppCompatActivity {
         String comeFrom = intent.getStringExtra("ComeFrom");
 
         if (comeFrom != null && comeFrom.equals("Add")) {
-            // 新建笔记
+            // Create new note
             String time = String.valueOf(new Date());
             if (noteBean == null) {
                 noteBean = new NoteBean(title, content, time);
@@ -127,7 +125,7 @@ public class NoteActivity extends AppCompatActivity {
                 noteBean.setTime(time);
             }
 
-            // 插入数据库
+            // Insert into database
             long result = noteDbHelper.insert(noteBean);
             if (result > 0) {
                 Toast.makeText(NoteActivity.this, "发布成功", Toast.LENGTH_SHORT).show();
@@ -136,7 +134,7 @@ public class NoteActivity extends AppCompatActivity {
                 Toast.makeText(NoteActivity.this, "发布失败，请重新发布", Toast.LENGTH_SHORT).show();
             }
         } else if (comeFrom != null && comeFrom.equals("NoteAdapter")) {
-            // 编辑现有笔记
+            // Edit existing note
             boolean noChanges = title.equals(noteBean.getTitle()) && content.equals(noteBean.getContent());
 
             if (noChanges) {
@@ -145,7 +143,7 @@ public class NoteActivity extends AppCompatActivity {
                 return;
             }
 
-            // 显示确认对话框
+            // Show confirmation dialog
             AlertDialog.Builder builder = new AlertDialog.Builder(NoteActivity.this);
             builder.setTitle("是否需要修改？");
             builder.setPositiveButton("确定", new DialogInterface.OnClickListener() {
@@ -155,7 +153,7 @@ public class NoteActivity extends AppCompatActivity {
                     noteBean.setContent(content);
                     noteBean.setTime(String.valueOf(new Date()));
 
-                    // 更新数据库
+                    // Update database
                     long result = noteDbHelper.update(noteBean);
                     if (result > 0) {
                         Toast.makeText(NoteActivity.this, "修改成功", Toast.LENGTH_SHORT).show();
@@ -183,32 +181,32 @@ public class NoteActivity extends AppCompatActivity {
 
     private void addImageToContainer(String imagePath) {
         try {
-            // 创建图片视图
+            // Create image view
             View imageView = LayoutInflater.from(this).inflate(R.layout.image_item, imageContainer, false);
             ImageView img = imageView.findViewById(R.id.imageViewItem);
             ImageView btnDelete = imageView.findViewById(R.id.btnDeleteImage);
 
-            // 设置图片
+            // Set image
             File imgFile = new File(imagePath);
             if (imgFile.exists()) {
                 Bitmap bitmap = BitmapFactory.decodeFile(imagePath);
                 img.setImageBitmap(bitmap);
 
-                // 设置删除按钮操作
+                // Set delete button action
                 btnDelete.setOnClickListener(new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
-                        // 从容器中移除视图
+                        // Remove view from container
                         imageContainer.removeView(imageView);
 
-                        // 从笔记中移除图片路径
+                        // Remove image path from note
                         if (noteBean != null && noteBean.getImagePaths() != null) {
                             noteBean.getImagePaths().remove(imagePath);
                         }
                     }
                 });
 
-                // 将视图添加到容器
+                // Add view to container
                 imageContainer.addView(imageView);
             }
         } catch (Exception e) {
@@ -221,16 +219,16 @@ public class NoteActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode == Activity.RESULT_OK) {
             if (requestCode == ImageUtils.REQUEST_IMAGE_PICK && data != null) {
-                // 图库选择结果
+                // Gallery selection result
                 Uri selectedImage = data.getData();
                 if (selectedImage != null) {
                     String imagePath = ImageUtils.copyUriToPrivateStorage(this, selectedImage);
 
                     if (!imagePath.isEmpty()) {
-                        // 添加图片到界面
+                        // Add image to UI
                         addImageToContainer(imagePath);
 
-                        // 添加图片路径到笔记
+                        // Add image path to note
                         if (noteBean == null) {
                             noteBean = new NoteBean("", "", "");
                         }
@@ -246,7 +244,7 @@ public class NoteActivity extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
         if (requestCode == ImageUtils.REQUEST_STORAGE_PERMISSION) {
-            // 检查是否所有请求的权限都被授予了
+            // Check if all requested permissions were granted
             boolean allGranted = true;
             for (int result : grantResults) {
                 if (result != PackageManager.PERMISSION_GRANTED) {
@@ -256,14 +254,12 @@ public class NoteActivity extends AppCompatActivity {
             }
 
             if (allGranted) {
-                // 所有权限都获取成功，可以选择图片
+                // All permissions granted, can pick image
                 ImageUtils.pickImageFromGallery(this);
             } else {
-                // 用户拒绝了一些权限
+                // User denied some permissions
                 Toast.makeText(this, "需要存储权限才能上传图片", Toast.LENGTH_LONG).show();
             }
         }
     }
-
 }
-

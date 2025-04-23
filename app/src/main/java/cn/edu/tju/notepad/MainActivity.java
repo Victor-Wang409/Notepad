@@ -1,59 +1,89 @@
 package cn.edu.tju.notepad;
 
-import android.content.DialogInterface;
 import android.content.Intent;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Paint;
-import android.graphics.RectF;
 import android.os.Bundle;
-import android.text.Editable;
-import android.text.TextWatcher;
-import android.view.KeyEvent;
+import android.view.MenuItem;
 import android.view.View;
-import android.view.inputmethod.EditorInfo;
-import android.widget.EditText;
-import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.recyclerview.widget.ItemTouchHelper;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentTransaction;
 
-import java.util.List;
-import cn.edu.tju.notepad.R;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 public class MainActivity extends AppCompatActivity {
-    NoteDbHelper noteDbHelper;
-    RecyclerView recyclerView;
-    NoteAdapter noteAdapter;
-    EditText editTextSearch;
-    ImageView clearSearchIcon;
+
+    private TextView titleTextView;
+    private BottomNavigationView bottomNavigationView;
+    private FloatingActionButton fabAddNote;
+
+    private NoteFragment noteFragment;
+    private UserFragment userFragment;
+    private Fragment activeFragment;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        noteDbHelper = new NoteDbHelper(MainActivity.this);
 
-        recyclerView = findViewById(R.id.recycleView);
-        editTextSearch = findViewById(R.id.editTextSearch);
-        clearSearchIcon = findViewById(R.id.clearSearchIcon);
-        ImageView imageViewAdd = findViewById(R.id.imageViewAdd);
+        // Initialize views
+        titleTextView = findViewById(R.id.textView);
+        bottomNavigationView = findViewById(R.id.bottom_navigation);
+        fabAddNote = findViewById(R.id.fab_add_note);
 
-        LinearLayoutManager linearLayoutManager = new LinearLayoutManager(MainActivity.this);
-        linearLayoutManager.setOrientation(RecyclerView.VERTICAL);
-        recyclerView.setLayoutManager(linearLayoutManager);
+        // Initialize fragments
+        if (savedInstanceState == null) {
+            // 只在首次创建时初始化Fragment，避免重复创建
+            noteFragment = new NoteFragment();
+            userFragment = new UserFragment();
 
-        // 设置滑动删除和拖拽排序功能
-        ItemTouchHelper itemTouchHelper = new ItemTouchHelper(new NoteItemTouchHelperCallback());
-        itemTouchHelper.attachToRecyclerView(recyclerView);
+            // 初始化时添加所有Fragment并隐藏非默认的Fragment
+            FragmentManager fragmentManager = getSupportFragmentManager();
+            FragmentTransaction transaction = fragmentManager.beginTransaction();
+            transaction.add(R.id.fragment_container, userFragment).hide(userFragment);
+            transaction.add(R.id.fragment_container, noteFragment);
+            transaction.commit();
 
+            activeFragment = noteFragment;
+        }
 
-        imageViewAdd.setOnClickListener(new View.OnClickListener() {
+        // Set up bottom navigation
+        setupBottomNavigation();
+
+        // Set up FAB
+        setupFAB();
+
+        // 设置默认标题
+        setTitle("笔记");
+    }
+
+    private void setupBottomNavigation() {
+        bottomNavigationView.setOnNavigationItemSelectedListener(new BottomNavigationView.OnNavigationItemSelectedListener() {
+            @Override
+            public boolean onNavigationItemSelected(@NonNull MenuItem item) {
+                int id = item.getItemId();
+                if (id == R.id.navigation_notes) {
+                    switchFragment(noteFragment);
+                    setTitle("笔记");
+                    fabAddNote.setVisibility(View.VISIBLE);
+                    return true;
+                } else if (id == R.id.navigation_user) {
+                    switchFragment(userFragment);
+                    setTitle("用户");
+                    fabAddNote.setVisibility(View.GONE);
+                    return true;
+                }
+                return false;
+            }
+        });
+    }
+
+    private void setupFAB() {
+        fabAddNote.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 Intent intent = new Intent(MainActivity.this, NoteActivity.class);
@@ -61,224 +91,32 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(intent);
             }
         });
-
-        // 初始化搜索功能
-        setupSearchFunctionality();
     }
 
-    private void setupSearchFunctionality() {
-        // 添加文本变化监听器
-        editTextSearch.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-                // 不需要实现
-            }
+    private void switchFragment(Fragment targetFragment) {
+        if (activeFragment == targetFragment) return;
 
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                // 当文本改变时过滤结果
-                if (noteAdapter != null) {
-                    noteAdapter.filter(s.toString());
-                }
+        FragmentTransaction transaction = getSupportFragmentManager().beginTransaction();
+        transaction.hide(activeFragment).show(targetFragment).commit();
+        activeFragment = targetFragment;
 
-                // 控制清除按钮的显示
-                if (s.length() > 0) {
-                    clearSearchIcon.setVisibility(View.VISIBLE);
-                } else {
-                    clearSearchIcon.setVisibility(View.GONE);
-                }
-            }
+        // 如果目标是笔记Fragment，手动触发刷新
+        if (targetFragment instanceof NoteFragment) {
+            ((NoteFragment) targetFragment).refreshNotes();
+        }
+    }
 
-            @Override
-            public void afterTextChanged(Editable s) {
-                // 不需要实现
-            }
-        });
-
-        // 设置键盘搜索键监听器
-        editTextSearch.setOnEditorActionListener(new TextView.OnEditorActionListener() {
-            @Override
-            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-                if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                    // 执行搜索
-                    if (noteAdapter != null) {
-                        noteAdapter.filter(editTextSearch.getText().toString());
-                    }
-                    return true;
-                }
-                return false;
-            }
-        });
-
-        // 设置清除按钮点击事件
-        clearSearchIcon.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                editTextSearch.setText("");
-                clearSearchIcon.setVisibility(View.GONE);
-                // 清空搜索后显示所有内容
-                if (noteAdapter != null) {
-                    noteAdapter.filter("");
-                }
-            }
-        });
+    private void setTitle(String title) {
+        titleTextView.setText(title);
     }
 
     @Override
-    protected void onStart() {
-        super.onStart();
-        List<NoteBean> list = noteDbHelper.query();
+    protected void onResume() {
+        super.onResume();
 
-        if (noteAdapter == null) {
-            noteAdapter = new NoteAdapter(list, MainActivity.this);
-            recyclerView.setAdapter(noteAdapter);
-        } else {
-            // 刷新数据
-            noteAdapter.refreshData(list);
-        }
-
-        // 如果有搜索词，保持搜索状态
-        if (editTextSearch != null && editTextSearch.getText().length() > 0) {
-            noteAdapter.filter(editTextSearch.getText().toString());
-        }
-    }
-
-    // 实现ItemTouchHelper.Callback来处理滑动删除和拖拽排序
-    private class NoteItemTouchHelperCallback extends ItemTouchHelper.Callback {
-
-        // 用于背景和边框绘制的Paint对象
-        private Paint backgroundPaint;
-        private Paint borderPaint;
-        // 圆角半径
-        private float cornerRadius = 20f;
-
-        // 构造函数初始化Paint对象
-        public NoteItemTouchHelperCallback() {
-            backgroundPaint = new Paint();
-            backgroundPaint.setColor(Color.RED);
-            backgroundPaint.setStyle(Paint.Style.FILL);
-            backgroundPaint.setAntiAlias(true);  // 添加抗锯齿效果，使边缘更平滑
-
-            borderPaint = new Paint();
-            borderPaint.setColor(Color.RED);
-            borderPaint.setStyle(Paint.Style.STROKE);
-            borderPaint.setStrokeWidth(5);
-            borderPaint.setAntiAlias(true);  // 添加抗锯齿效果，使边缘更平滑
-        }
-
-        @Override
-        public int getMovementFlags(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
-            // 定义拖拽方向为上下，滑动方向为左右
-            int dragFlags = ItemTouchHelper.UP | ItemTouchHelper.DOWN;
-            int swipeFlags = ItemTouchHelper.START | ItemTouchHelper.END;
-            return makeMovementFlags(dragFlags, swipeFlags);
-        }
-
-        @Override
-        public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder source,
-                              @NonNull RecyclerView.ViewHolder target) {
-            // 处理拖拽排序
-            int fromPosition = source.getAdapterPosition();
-            int toPosition = target.getAdapterPosition();
-            noteAdapter.moveItem(fromPosition, toPosition);
-            return true;
-        }
-
-        @Override
-        public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
-            // 处理滑动删除
-            final int position = viewHolder.getAdapterPosition();
-
-            // 显示确认对话框，询问用户是否确定要删除
-            AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-            builder.setTitle("是否要删除该信息？");
-            builder.setPositiveButton("确定", new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(DialogInterface dialogInterface, int i) {
-                    // 用户确认删除
-                    noteAdapter.removeItem(position);
-                }
-            });
-            builder.setNegativeButton("取消", new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(DialogInterface dialogInterface, int i) {
-                    // 用户取消删除，恢复显示
-                    noteAdapter.notifyItemChanged(position);
-                }
-            });
-            AlertDialog alertDialog = builder.create();
-            alertDialog.show();
-        }
-
-        @Override
-        public boolean isLongPressDragEnabled() {
-            // 允许长按拖拽
-            return true;
-        }
-
-        @Override
-        public boolean isItemViewSwipeEnabled() {
-            // 允许滑动删除
-            return true;
-        }
-
-        @Override
-        public void onChildDraw(@NonNull Canvas c, @NonNull RecyclerView recyclerView,
-                                @NonNull RecyclerView.ViewHolder viewHolder,
-                                float dX, float dY, int actionState, boolean isCurrentlyActive) {
-
-            View itemView = viewHolder.itemView;
-
-            // 保存画布当前状态
-            int saveCount = c.save();
-
-            if (actionState == ItemTouchHelper.ACTION_STATE_SWIPE) {
-                // 滑动删除状态 - 显示红色背景
-                // 计算透明度 - 滑动距离越大，透明度越低
-                float alpha = 1.0f - Math.abs(dX) / (float) itemView.getWidth();
-//                float alpha = 1.0f;
-//
-                // 设置透明度
-                itemView.setAlpha(alpha);
-
-                // 创建带圆角的矩形区域
-                RectF rectF;
-                if (dX > 0) {
-                    // 右滑
-                    rectF = new RectF(itemView.getLeft(), itemView.getTop(),
-                            itemView.getLeft() + dX, itemView.getBottom());
-                } else {
-                    // 左滑
-                    rectF = new RectF(itemView.getRight() + dX, itemView.getTop(),
-                            itemView.getRight(), itemView.getBottom());
-                }
-
-                // 绘制圆角红色背景
-                c.drawRoundRect(rectF, cornerRadius, cornerRadius, backgroundPaint);
-
-            } else if (actionState == ItemTouchHelper.ACTION_STATE_DRAG && isCurrentlyActive) {
-                // 拖拽状态 - 显示蓝色边框
-                // 创建带圆角的矩形区域
-                RectF rectF = new RectF(itemView.getLeft(), itemView.getTop(),
-                        itemView.getRight(), itemView.getBottom());
-
-                // 绘制蓝色圆角
-                borderPaint.setColor(Color.BLUE);
-                c.drawRoundRect(rectF, cornerRadius, cornerRadius, borderPaint);
-            }
-
-            // 恢复画布状态
-            c.restoreToCount(saveCount);
-
-            // 调用父类方法保持默认行为
-            super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive);
-        }
-
-        @Override
-        public void clearView(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
-            // 当交互结束时恢复默认外观
-            super.clearView(recyclerView, viewHolder);
-            viewHolder.itemView.setAlpha(1.0f);
+        // 应用恢复前台时，如果当前显示的是笔记Fragment，刷新数据
+        if (activeFragment instanceof NoteFragment) {
+            ((NoteFragment) activeFragment).refreshNotes();
         }
     }
 }

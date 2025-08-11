@@ -1,264 +1,242 @@
-package cn.edu.tju.notepad;
+package cn.edu.tju.notepad
 
-import android.app.Activity;
-import android.content.DialogInterface;
-import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.net.Uri;
-import android.os.Bundle;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.Toast;
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
+import java.io.File
+import java.util.*
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
+class NoteActivity : AppCompatActivity() {
 
-import java.io.File;
-import java.util.Date;
+    private lateinit var editTextTitle: EditText
+    private lateinit var editTextContent: EditText
+    private lateinit var imageContainer: LinearLayout
+    private lateinit var btnAddImage: Button
 
-public class NoteActivity extends AppCompatActivity {
-    private EditText editTextTitle, editTextContent;
-    private LinearLayout imageContainer;
-    private Button btnAddImage;
+    private lateinit var noteDbHelper: NoteDbHelper
+    private var noteBean: NoteBean? = null
 
-    private NoteDbHelper noteDbHelper;
-    private NoteBean noteBean;
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_note)
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_note);
+        // 初始化视图
+        initViews()
 
-        // Initialize views
-        initViews();
+        // 设置数据
+        setupData()
 
-        // Set up data
-        setupData();
-
-        // Set up listeners
-        setupListeners();
+        // 设置监听器
+        setupListeners()
     }
 
-    private void initViews() {
-        ImageView imageViewBack = findViewById(R.id.imageViewBack);
-        editTextTitle = findViewById(R.id.editTextTitle);
-        editTextContent = findViewById(R.id.editTextContent);
-        imageContainer = findViewById(R.id.imageContainer);
-        btnAddImage = findViewById(R.id.btnAddImage);
+    private fun initViews() {
+        findViewById<ImageView>(R.id.imageViewBack)
+        editTextTitle = findViewById(R.id.editTextTitle)
+        editTextContent = findViewById(R.id.editTextContent)
+        imageContainer = findViewById(R.id.imageContainer)
+        btnAddImage = findViewById(R.id.btnAddImage)
     }
 
-    private void setupData() {
-        // Get passed data
-        Intent intent = getIntent();
-        String comeFrom = intent.getStringExtra("ComeFrom");
-        noteDbHelper = new NoteDbHelper(NoteActivity.this);
+    private fun setupData() {
+        // 获取传递的数据
+        val intent = intent
+        val comeFrom = intent.getStringExtra("ComeFrom")
+        noteDbHelper = NoteDbHelper(this@NoteActivity)
 
-        // If editing an existing note
-        if (comeFrom != null && comeFrom.equals("NoteAdapter")) {
-            noteBean = (NoteBean) intent.getSerializableExtra("NoteBean");
-            if (noteBean != null) {
-                editTextTitle.setText(noteBean.getTitle());
-                editTextContent.setText(noteBean.getContent());
+        // 如果编辑现有笔记
+        if (comeFrom == "NoteAdapter") {
+            noteBean = intent.getSerializableExtra("NoteBean", NoteBean::class.java)
+            noteBean?.let { note ->
+                editTextTitle.setText(note.title)
+                editTextContent.setText(note.content)
 
-                // Load images
-                loadImages();
+                // 加载图片
+                loadImages()
             }
         }
     }
 
-    private void setupListeners() {
-        // Back button
-        findViewById(R.id.imageViewBack).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                finish();
-            }
-        });
+    private fun setupListeners() {
+        // 返回按钮
+        findViewById<ImageView>(R.id.imageViewBack).setOnClickListener {
+            finish()
+        }
 
-        // Submit button
-        Button buttonCommit = findViewById(R.id.buttonCommit);
-        buttonCommit.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                saveNote();
-            }
-        });
+        // 提交按钮
+        val buttonCommit = findViewById<Button>(R.id.buttonCommit)
+        buttonCommit.setOnClickListener {
+            saveNote()
+        }
 
-        // Add image button
-        btnAddImage.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                ImageUtils.pickImageFromGallery(NoteActivity.this);
-            }
-        });
+        // 添加图片按钮
+        btnAddImage.setOnClickListener {
+            ImageUtils.pickImageFromGallery(this@NoteActivity)
+        }
     }
 
-    private void saveNote() {
-        // Get input content
-        String title = editTextTitle.getText().toString().trim();
-        String content = editTextContent.getText().toString().trim();
+    private fun saveNote() {
+        // 获取输入内容
+        val title = editTextTitle.text.toString().trim()
+        val content = editTextContent.text.toString().trim()
 
         if (title.isEmpty() || content.isEmpty()) {
-            Toast.makeText(NoteActivity.this, "标题或内容为空，请补充后再发布", Toast.LENGTH_SHORT).show();
-            return;
+            Toast.makeText(this@NoteActivity, "标题或内容为空，请补充后再发布", Toast.LENGTH_SHORT).show()
+            return
         }
 
-        Intent intent = getIntent();
-        String comeFrom = intent.getStringExtra("ComeFrom");
+        val intent = intent
+        val comeFrom = intent.getStringExtra("ComeFrom")
 
-        if (comeFrom != null && comeFrom.equals("Add")) {
-            // Create new note
-            String time = String.valueOf(new Date());
-            if (noteBean == null) {
-                noteBean = new NoteBean(title, content, time);
-            } else {
-                noteBean.setTitle(title);
-                noteBean.setContent(content);
-                noteBean.setTime(time);
-            }
-
-            // Insert into database
-            long result = noteDbHelper.insert(noteBean);
-            if (result > 0) {
-                Toast.makeText(NoteActivity.this, "发布成功", Toast.LENGTH_SHORT).show();
-                finish();
-            } else {
-                Toast.makeText(NoteActivity.this, "发布失败，请重新发布", Toast.LENGTH_SHORT).show();
-            }
-        } else if (comeFrom != null && comeFrom.equals("NoteAdapter")) {
-            // Edit existing note
-            boolean noChanges = title.equals(noteBean.getTitle()) && content.equals(noteBean.getContent());
-
-            if (noChanges) {
-                Toast.makeText(NoteActivity.this, "没有修改", Toast.LENGTH_SHORT).show();
-                finish();
-                return;
-            }
-
-            // Show confirmation dialog
-            AlertDialog.Builder builder = new AlertDialog.Builder(NoteActivity.this);
-            builder.setTitle("是否需要修改？");
-            builder.setPositiveButton("确定", new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(DialogInterface dialogInterface, int i) {
-                    noteBean.setTitle(title);
-                    noteBean.setContent(content);
-                    noteBean.setTime(String.valueOf(new Date()));
-
-                    // Update database
-                    long result = noteDbHelper.update(noteBean);
-                    if (result > 0) {
-                        Toast.makeText(NoteActivity.this, "修改成功", Toast.LENGTH_SHORT).show();
-                        finish();
-                    } else {
-                        Toast.makeText(NoteActivity.this, "修改失败，请重试！", Toast.LENGTH_SHORT).show();
+        when (comeFrom) {
+            "Add" -> {
+                // 创建新笔记
+                val time = Date().toString()
+                if (noteBean == null) {
+                    noteBean = NoteBean(title, content, time)
+                } else {
+                    noteBean?.apply {
+                        this.title = title
+                        this.content = content
+                        this.time = time
                     }
                 }
-            });
-            builder.setNegativeButton("取消", null);
-            AlertDialog alertDialog = builder.create();
-            alertDialog.show();
-        }
-    }
 
-    private void loadImages() {
-        if (noteBean != null && noteBean.getImagePaths() != null) {
-            for (String imagePath : noteBean.getImagePaths()) {
-                if (!imagePath.isEmpty()) {
-                    addImageToContainer(imagePath);
+                // 插入到数据库
+                val result = noteDbHelper.insert(noteBean!!)
+                if (result > 0) {
+                    Toast.makeText(this@NoteActivity, "发布成功", Toast.LENGTH_SHORT).show()
+                    finish()
+                } else {
+                    Toast.makeText(this@NoteActivity, "发布失败，请重新发布", Toast.LENGTH_SHORT).show()
+                }
+            }
+            "NoteAdapter" -> {
+                // 编辑现有笔记
+                val currentNote = noteBean!!
+                val noChanges = title == currentNote.title && content == currentNote.content
+
+                if (noChanges) {
+                    Toast.makeText(this@NoteActivity, "没有修改", Toast.LENGTH_SHORT).show()
+                    finish()
+                    return
+                }
+
+                // 显示确认对话框
+                AlertDialog.Builder(this@NoteActivity).apply {
+                    setTitle("是否需要修改？")
+                    setPositiveButton("确定") { _, _ ->
+                        currentNote.apply {
+                            this.title = title
+                            this.content = content
+                            this.time = Date().toString()
+                        }
+
+                        // 更新数据库
+                        val result = noteDbHelper.update(currentNote)
+                        if (result > 0) {
+                            Toast.makeText(this@NoteActivity, "修改成功", Toast.LENGTH_SHORT).show()
+                            finish()
+                        } else {
+                            Toast.makeText(this@NoteActivity, "修改失败，请重试！", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    setNegativeButton("取消", null)
+                    create().show()
                 }
             }
         }
     }
 
-    private void addImageToContainer(String imagePath) {
+    private fun loadImages() {
+        noteBean?.imagePaths?.forEach { imagePath ->
+            if (imagePath.isNotEmpty()) {
+                addImageToContainer(imagePath)
+            }
+        }
+    }
+
+    private fun addImageToContainer(imagePath: String) {
         try {
-            // Create image view
-            View imageView = LayoutInflater.from(this).inflate(R.layout.image_item, imageContainer, false);
-            ImageView img = imageView.findViewById(R.id.imageViewItem);
-            ImageView btnDelete = imageView.findViewById(R.id.btnDeleteImage);
+            // 创建图片视图
+            val imageView = LayoutInflater.from(this).inflate(R.layout.image_item, imageContainer, false)
+            val img = imageView.findViewById<ImageView>(R.id.imageViewItem)
+            val btnDelete = imageView.findViewById<ImageView>(R.id.btnDeleteImage)
 
-            // Set image
-            File imgFile = new File(imagePath);
+            // 设置图片
+            val imgFile = File(imagePath)
             if (imgFile.exists()) {
-                Bitmap bitmap = BitmapFactory.decodeFile(imagePath);
-                img.setImageBitmap(bitmap);
+                val bitmap = BitmapFactory.decodeFile(imagePath)
+                img.setImageBitmap(bitmap)
 
-                // Set delete button action
-                btnDelete.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        // Remove view from container
-                        imageContainer.removeView(imageView);
+                // 设置删除按钮动作
+                btnDelete.setOnClickListener {
+                    // 从容器中移除视图
+                    imageContainer.removeView(imageView)
 
-                        // Remove image path from note
-                        if (noteBean != null && noteBean.getImagePaths() != null) {
-                            noteBean.getImagePaths().remove(imagePath);
-                        }
-                    }
-                });
+                    // 从笔记中移除图片路径
+                    noteBean?.imagePaths?.remove(imagePath)
+                }
 
-                // Add view to container
-                imageContainer.addView(imageView);
+                // 添加视图到容器
+                imageContainer.addView(imageView)
             }
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode == Activity.RESULT_OK) {
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode == RESULT_OK) {
             if (requestCode == ImageUtils.REQUEST_IMAGE_PICK && data != null) {
-                // Gallery selection result
-                Uri selectedImage = data.getData();
-                if (selectedImage != null) {
-                    String imagePath = ImageUtils.copyUriToPrivateStorage(this, selectedImage);
+                // 图库选择结果
+                val selectedImage: Uri? = data.data
+                selectedImage?.let { uri ->
+                    val imagePath = ImageUtils.copyUriToPrivateStorage(this, uri)
 
-                    if (!imagePath.isEmpty()) {
-                        // Add image to UI
-                        addImageToContainer(imagePath);
+                    if (imagePath.isNotEmpty()) {
+                        // 添加图片到UI
+                        addImageToContainer(imagePath)
 
-                        // Add image path to note
+                        // 添加图片路径到笔记
                         if (noteBean == null) {
-                            noteBean = new NoteBean("", "", "");
+                            noteBean = NoteBean("", "", "")
                         }
-                        noteBean.addImagePath(imagePath);
+                        noteBean?.addImagePath(imagePath)
                     }
                 }
             }
         }
     }
 
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         if (requestCode == ImageUtils.REQUEST_STORAGE_PERMISSION) {
-            // Check if all requested permissions were granted
-            boolean allGranted = true;
-            for (int result : grantResults) {
-                if (result != PackageManager.PERMISSION_GRANTED) {
-                    allGranted = false;
-                    break;
-                }
-            }
+            // 检查是否所有请求的权限都被授予
+            val allGranted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
 
             if (allGranted) {
-                // All permissions granted, can pick image
-                ImageUtils.pickImageFromGallery(this);
+                // 所有权限都被授予，可以选择图片
+                ImageUtils.pickImageFromGallery(this)
             } else {
-                // User denied some permissions
-                Toast.makeText(this, "需要存储权限才能上传图片", Toast.LENGTH_LONG).show();
+                // 用户拒绝了某些权限
+                Toast.makeText(this, "需要存储权限才能上传图片", Toast.LENGTH_LONG).show()
             }
         }
     }

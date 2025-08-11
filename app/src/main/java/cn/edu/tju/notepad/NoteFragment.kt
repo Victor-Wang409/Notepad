@@ -1,354 +1,331 @@
-package cn.edu.tju.notepad;
+package cn.edu.tju.notepad
 
-import android.content.Intent;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Paint;
-import android.graphics.RectF;
-import android.os.Bundle;
-import android.text.Editable;
-import android.text.TextWatcher;
-import android.util.Log;
-import android.view.KeyEvent;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.view.inputmethod.EditorInfo;
-import android.widget.EditText;
-import android.widget.ImageView;
-import android.widget.TextView;
-import android.widget.Toast;
+import android.graphics.*
+import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
+import androidx.fragment.app.Fragment
+import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import androidx.core.graphics.withSave
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
-import androidx.fragment.app.Fragment;
-import androidx.recyclerview.widget.ItemTouchHelper;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
+class NoteFragment : Fragment() {
 
-import java.util.List;
+    private lateinit var noteDbHelper: NoteDbHelper
+    private lateinit var recyclerView: RecyclerView
+    private var noteAdapter: NoteAdapter? = null
+    private lateinit var editTextSearch: EditText
+    private lateinit var clearSearchIcon: ImageView
+    private var isViewCreated = false
 
-public class NoteFragment extends Fragment {
-
-    private NoteDbHelper noteDbHelper;
-    private RecyclerView recyclerView;
-    private NoteAdapter noteAdapter;
-    private EditText editTextSearch;
-    private ImageView clearSearchIcon;
-    private boolean isViewCreated = false;
-
-    public NoteFragment() {
-        // Required empty public constructor
-    }
-
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
         // 初始化数据库帮助类
-        noteDbHelper = new NoteDbHelper(getActivity());
+        noteDbHelper = NoteDbHelper(activity)
     }
 
-    @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
-                             Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
-        View rootView = inflater.inflate(R.layout.fragment_note, container, false);
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        // 为这个fragment填充布局
+        val rootView = inflater.inflate(R.layout.fragment_note, container, false)
 
-        // Initialize views
-        recyclerView = rootView.findViewById(R.id.recyclerView);
-        editTextSearch = rootView.findViewById(R.id.editTextSearch);
-        clearSearchIcon = rootView.findViewById(R.id.clearSearchIcon);
+        recyclerView = rootView.findViewById(R.id.recyclerView)
+        editTextSearch = rootView.findViewById(R.id.editTextSearch)
+        clearSearchIcon = rootView.findViewById(R.id.clearSearchIcon)
 
-        // Set up RecyclerView
-        LinearLayoutManager linearLayoutManager = new LinearLayoutManager(getActivity());
-        linearLayoutManager.setOrientation(RecyclerView.VERTICAL);
-        recyclerView.setLayoutManager(linearLayoutManager);
+        val linearLayoutManager = LinearLayoutManager(activity).apply {
+            orientation = RecyclerView.VERTICAL
+        }
+        recyclerView.layoutManager = linearLayoutManager
 
-        // Set up swipe-to-delete and drag-and-drop functionality
-        ItemTouchHelper itemTouchHelper = new ItemTouchHelper(new NoteItemTouchHelperCallback());
-        itemTouchHelper.attachToRecyclerView(recyclerView);
+        // 设置滑动删除和拖拽排序功能
+        val itemTouchHelper = ItemTouchHelper(NoteItemTouchHelperCallback())
+        itemTouchHelper.attachToRecyclerView(recyclerView)
 
-        // Set up search functionality
-        setupSearchFunctionality();
+        // 设置搜索功能
+        setupSearchFunctionality()
 
-        isViewCreated = true;
+        isViewCreated = true
 
         // 立即加载笔记数据
-        loadNotes();
+        loadNotes()
 
-        return rootView;
+        return rootView
     }
 
-    @Override
-    public void onViewStateRestored(@Nullable Bundle savedInstanceState) {
-        super.onViewStateRestored(savedInstanceState);
+    override fun onViewStateRestored(savedInstanceState: Bundle?) {
+        super.onViewStateRestored(savedInstanceState)
         // 视图状态恢复后刷新数据
         if (isViewCreated) {
-            loadNotes();
+            loadNotes()
         }
     }
 
-    @Override
-    public void onResume() {
-        super.onResume();
+    override fun onResume() {
+        super.onResume()
         // 确保Fragment恢复时刷新数据
         if (isViewCreated) {
-            loadNotes();
+            loadNotes()
         }
     }
 
-    @Override
-    public void setUserVisibleHint(boolean isVisibleToUser) {
-        super.setUserVisibleHint(isVisibleToUser);
+    override fun setUserVisibleHint(isVisibleToUser: Boolean) {
+        super.setUserVisibleHint(isVisibleToUser)
         // 当Fragment对用户可见时刷新数据
         if (isVisibleToUser && isViewCreated) {
-            loadNotes();
+            loadNotes()
         }
     }
 
-    @Override
-    public void onHiddenChanged(boolean hidden) {
-        super.onHiddenChanged(hidden);
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
         // 当Fragment从隐藏状态变为可见状态时刷新数据
         if (!hidden && isViewCreated) {
-            loadNotes();
+            loadNotes()
         }
     }
 
     // 添加一个公共方法，允许外部强制刷新
-    public void refreshNotes() {
+    fun refreshNotes() {
         if (isViewCreated) {
-            loadNotes();
+            loadNotes()
         }
     }
 
-    private void loadNotes() {
+    private fun loadNotes() {
         try {
-            if (getActivity() == null) return;
-
-            // 确保在UI线程执行
-            getActivity().runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    // 检查数据库帮助类是否初始化
-                    if (noteDbHelper == null) {
-                        noteDbHelper = new NoteDbHelper(getActivity());
-                    }
-
+            activity?.let { context ->
+                // 确保在UI线程中执行
+                context.runOnUiThread {
                     // 从数据库获取笔记列表
-                    List<NoteBean> list = noteDbHelper.query();
+                    val list = noteDbHelper.query()
 
                     if (noteAdapter == null) {
-                        noteAdapter = new NoteAdapter(list, getActivity());
-                        recyclerView.setAdapter(noteAdapter);
+                        noteAdapter = NoteAdapter(list.toMutableList(), activity)
+                        recyclerView.adapter = noteAdapter
                     } else {
                         // 刷新数据
-                        noteAdapter.refreshData(list);
+                        noteAdapter?.refreshData(list)
                     }
 
                     // 如果有搜索词，保持搜索状态
-                    if (editTextSearch != null && editTextSearch.getText().length() > 0) {
-                        noteAdapter.filter(editTextSearch.getText().toString());
+                    if (editTextSearch.text.isNotEmpty()) {
+                        noteAdapter?.filter(editTextSearch.text.toString())
                     }
                 }
-            });
-        } catch (Exception e) {
-            e.printStackTrace();
-            // 可以添加Toast显示错误消息
-            if (getActivity() != null) {
-                Toast.makeText(getActivity(), "加载笔记失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // 显示错误消息
+            activity?.let { context ->
+                Toast.makeText(context, "加载笔记失败: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    private void setupSearchFunctionality() {
-        // Add text change listener
-        editTextSearch.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-                // Not needed
+    private fun setupSearchFunctionality() {
+        // 添加文本变化监听器
+        editTextSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+                // 不需要处理
             }
 
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                // Filter results when text changes
-                if (noteAdapter != null) {
-                    noteAdapter.filter(s.toString());
-                }
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                // 文本变化时过滤结果
+                noteAdapter?.filter(s.toString())
 
-                // Control clear button visibility
-                if (s.length() > 0) {
-                    clearSearchIcon.setVisibility(View.VISIBLE);
+                // 控制清除按钮的可见性
+                clearSearchIcon.visibility = if (s?.isNotEmpty() == true) {
+                    View.VISIBLE
                 } else {
-                    clearSearchIcon.setVisibility(View.GONE);
+                    View.GONE
                 }
             }
 
-            @Override
-            public void afterTextChanged(Editable s) {
-                // Not needed
+            override fun afterTextChanged(s: Editable?) {
+                // 不需要处理
             }
-        });
+        })
 
-        // Set keyboard search key listener
-        editTextSearch.setOnEditorActionListener(new TextView.OnEditorActionListener() {
-            @Override
-            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-                if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                    // Execute search
-                    if (noteAdapter != null) {
-                        noteAdapter.filter(editTextSearch.getText().toString());
-                    }
-                    return true;
-                }
-                return false;
+        // 设置键盘搜索键监听器
+        editTextSearch.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                // 执行搜索
+                noteAdapter?.filter(editTextSearch.text.toString())
+                true
+            } else {
+                false
             }
-        });
+        }
 
-        // Set clear button click listener
-        clearSearchIcon.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                editTextSearch.setText("");
-                clearSearchIcon.setVisibility(View.GONE);
-                // Show all content after clearing search
-                if (noteAdapter != null) {
-                    noteAdapter.filter("");
-                }
-            }
-        });
+        // 设置清除按钮点击监听器
+        clearSearchIcon.setOnClickListener {
+            editTextSearch.setText("")
+            clearSearchIcon.visibility = View.GONE
+            // 清除搜索后显示所有内容
+            noteAdapter?.filter("")
+        }
     }
 
-    // ItemTouchHelper.Callback implementation for swipe-to-delete and drag-and-drop
-    private class NoteItemTouchHelperCallback extends ItemTouchHelper.Callback {
+    // ItemTouchHelper.Callback实现滑动删除和拖拽排序功能
+    private inner class NoteItemTouchHelperCallback : ItemTouchHelper.Callback() {
 
-        // Paint objects for background and border drawing
-        private Paint backgroundPaint;
-        private Paint borderPaint;
-        // Corner radius
-        private float cornerRadius = 20f;
-
-        // Constructor initializes Paint objects
-        public NoteItemTouchHelperCallback() {
-            backgroundPaint = new Paint();
-            backgroundPaint.setColor(Color.RED);
-            backgroundPaint.setStyle(Paint.Style.FILL);
-            backgroundPaint.setAntiAlias(true);  // Add anti-aliasing effect for smoother edges
-
-            borderPaint = new Paint();
-            borderPaint.setColor(Color.RED);
-            borderPaint.setStyle(Paint.Style.STROKE);
-            borderPaint.setStrokeWidth(5);
-            borderPaint.setAntiAlias(true);  // Add anti-aliasing effect for smoother edges
+        // 用于背景和边框绘制的画笔对象
+        private val backgroundPaint = Paint().apply {
+            color = Color.RED
+            style = Paint.Style.FILL
+            isAntiAlias = true  // 添加抗锯齿效果使边缘更平滑
         }
 
-        @Override
-        public int getMovementFlags(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
-            // Define drag direction as up and down, swipe direction as left and right
-            int dragFlags = ItemTouchHelper.UP | ItemTouchHelper.DOWN;
-            int swipeFlags = ItemTouchHelper.START | ItemTouchHelper.END;
-            return makeMovementFlags(dragFlags, swipeFlags);
+        private val borderPaint = Paint().apply {
+            color = Color.RED
+            style = Paint.Style.STROKE
+            strokeWidth = 5f
+            isAntiAlias = true  // 添加抗锯齿效果使边缘更平滑
         }
 
-        @Override
-        public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder source,
-                              @NonNull RecyclerView.ViewHolder target) {
-            // Handle drag-and-drop sorting
-            int fromPosition = source.getAdapterPosition();
-            int toPosition = target.getAdapterPosition();
-            noteAdapter.moveItem(fromPosition, toPosition);
-            return true;
+        // 圆角半径
+        private val cornerRadius = 20f
+
+        override fun getMovementFlags(
+            recyclerView: RecyclerView,
+            viewHolder: RecyclerView.ViewHolder
+        ): Int {
+            // 定义拖拽方向为上下，滑动方向为左右
+            val dragFlags = ItemTouchHelper.UP or ItemTouchHelper.DOWN
+            val swipeFlags = ItemTouchHelper.START or ItemTouchHelper.END
+            return makeMovementFlags(dragFlags, swipeFlags)
         }
 
-        @Override
-        public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
-            // Handle swipe-to-delete
-            final int position = viewHolder.getAdapterPosition();
-
-            // Show confirmation dialog asking the user if they're sure about deleting
-            AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-            builder.setTitle("是否要删除该信息？");
-            builder.setPositiveButton("确定", (dialogInterface, i) -> {
-                // User confirms deletion
-                noteAdapter.removeItem(position);
-            });
-            builder.setNegativeButton("取消", (dialogInterface, i) -> {
-                // User cancels deletion, restore display
-                noteAdapter.notifyItemChanged(position);
-            });
-            AlertDialog alertDialog = builder.create();
-            alertDialog.show();
+        override fun onMove(
+            recyclerView: RecyclerView,
+            source: RecyclerView.ViewHolder,
+            target: RecyclerView.ViewHolder
+        ): Boolean {
+            // 处理拖拽排序
+            val fromPosition = source.adapterPosition
+            val toPosition = target.adapterPosition
+            noteAdapter?.moveItem(fromPosition, toPosition)
+            return true
         }
 
-        @Override
-        public boolean isLongPressDragEnabled() {
-            // Allow long press drag
-            return true;
+        override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+            // 处理滑动删除
+            val position = viewHolder.adapterPosition
+
+            // 显示确认对话框，询问用户是否确定删除
+            activity?.let { context ->
+                AlertDialog.Builder(context).apply {
+                    setTitle("是否要删除该信息？")
+                    setPositiveButton("确定") { _, _ ->
+                        // 用户确认删除
+                        noteAdapter?.removeItem(position)
+                    }
+                    setNegativeButton("取消") { _, _ ->
+                        // 用户取消删除，恢复显示
+                        noteAdapter?.notifyItemChanged(position)
+                    }
+                    create().show()
+                }
+            }
         }
 
-        @Override
-        public boolean isItemViewSwipeEnabled() {
-            // Allow swipe-to-delete
-            return true;
+        override fun isLongPressDragEnabled(): Boolean {
+            // 允许长按拖拽
+            return true
         }
 
-        @Override
-        public void onChildDraw(@NonNull Canvas c, @NonNull RecyclerView recyclerView,
-                                @NonNull RecyclerView.ViewHolder viewHolder,
-                                float dX, float dY, int actionState, boolean isCurrentlyActive) {
+        override fun isItemViewSwipeEnabled(): Boolean {
+            // 允许滑动删除
+            return true
+        }
 
-            View itemView = viewHolder.itemView;
+        override fun onChildDraw(
+            c: Canvas,
+            recyclerView: RecyclerView,
+            viewHolder: RecyclerView.ViewHolder,
+            dX: Float,
+            dY: Float,
+            actionState: Int,
+            isCurrentlyActive: Boolean
+        ) {
+            val itemView = viewHolder.itemView
 
-            // Save current canvas state
-            int saveCount = c.save();
+            // 保存当前画布状态
+            c.withSave {
+                when (actionState) {
+                    ItemTouchHelper.ACTION_STATE_SWIPE -> {
+                        // 滑动删除状态 - 显示红色背景
+                        // 计算透明度 - 滑动距离越大，透明度越低
+                        val alpha = 1.0f - kotlin.math.abs(dX) / itemView.width.toFloat()
 
-            if (actionState == ItemTouchHelper.ACTION_STATE_SWIPE) {
-                // Swipe-to-delete state - show red background
-                // Calculate transparency - the greater the swipe distance, the lower the transparency
-                float alpha = 1.0f - Math.abs(dX) / (float) itemView.getWidth();
+                        // 设置透明度
+                        itemView.alpha = alpha
 
-                // Set transparency
-                itemView.setAlpha(alpha);
+                        // 创建圆角矩形区域
+                        val rectF = if (dX > 0) {
+                            // 向右滑动
+                            RectF(
+                                itemView.left.toFloat(),
+                                itemView.top.toFloat(),
+                                itemView.left + dX,
+                                itemView.bottom.toFloat()
+                            )
+                        } else {
+                            // 向左滑动
+                            RectF(
+                                itemView.right + dX,
+                                itemView.top.toFloat(),
+                                itemView.right.toFloat(),
+                                itemView.bottom.toFloat()
+                            )
+                        }
 
-                // Create rounded rectangle area
-                RectF rectF;
-                if (dX > 0) {
-                    // Right swipe
-                    rectF = new RectF(itemView.getLeft(), itemView.getTop(),
-                            itemView.getLeft() + dX, itemView.getBottom());
-                } else {
-                    // Left swipe
-                    rectF = new RectF(itemView.getRight() + dX, itemView.getTop(),
-                            itemView.getRight(), itemView.getBottom());
+                        // 绘制圆角红色背景
+                        c.drawRoundRect(rectF, cornerRadius, cornerRadius, backgroundPaint)
+                    }
+
+                    ItemTouchHelper.ACTION_STATE_DRAG -> {
+                        if (isCurrentlyActive) {
+                            // 拖拽状态 - 显示蓝色边框
+                            // 创建圆角矩形区域
+                            val rectF = RectF(
+                                itemView.left.toFloat(),
+                                itemView.top.toFloat(),
+                                itemView.right.toFloat(),
+                                itemView.bottom.toFloat()
+                            )
+
+                            // 绘制蓝色圆角边框
+                            borderPaint.color = Color.BLUE
+                            c.drawRoundRect(rectF, cornerRadius, cornerRadius, borderPaint)
+                        }
+                    }
                 }
 
-                // Draw rounded red background
-                c.drawRoundRect(rectF, cornerRadius, cornerRadius, backgroundPaint);
-
-            } else if (actionState == ItemTouchHelper.ACTION_STATE_DRAG && isCurrentlyActive) {
-                // Drag state - show blue border
-                // Create rounded rectangle area
-                RectF rectF = new RectF(itemView.getLeft(), itemView.getTop(),
-                        itemView.getRight(), itemView.getBottom());
-
-                // Draw blue rounded corners
-                borderPaint.setColor(Color.BLUE);
-                c.drawRoundRect(rectF, cornerRadius, cornerRadius, borderPaint);
+                // 恢复画布状态
             }
 
-            // Restore canvas state
-            c.restoreToCount(saveCount);
-
-            // Call parent method to maintain default behavior
-            super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive);
+            // 调用父类方法以保持默认行为
+            super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
         }
 
-        @Override
-        public void clearView(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
-            // Restore default appearance when interaction ends
-            super.clearView(recyclerView, viewHolder);
-            viewHolder.itemView.setAlpha(1.0f);
+        override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
+            // 交互结束时恢复默认外观
+            super.clearView(recyclerView, viewHolder)
+            viewHolder.itemView.alpha = 1.0f
         }
     }
 }

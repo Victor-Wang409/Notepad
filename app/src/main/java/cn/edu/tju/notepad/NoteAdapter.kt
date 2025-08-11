@@ -1,165 +1,129 @@
-package cn.edu.tju.notepad;
+package cn.edu.tju.notepad
 
-import android.content.Context;
-import android.content.DialogInterface;
-import android.content.Intent;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.TextView;
-import android.widget.Toast;
+import android.content.Context
+import android.content.Intent
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
+import android.widget.Toast
+import androidx.recyclerview.widget.RecyclerView
+import java.util.*
 
-import androidx.annotation.NonNull;
-import androidx.cardview.widget.CardView;
-import androidx.recyclerview.widget.RecyclerView;
+class NoteAdapter(
+    private val list: MutableList<NoteBean>,
+    private val mContext: Context? = null
+) : RecyclerView.Adapter<NoteAdapter.NoteItemViewHolder>() {
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+    private val filteredList: MutableList<NoteBean> = ArrayList(list)
+    private val dbHelper: NoteDbHelper? = mContext?.let { NoteDbHelper(it) }
 
-import cn.edu.tju.notepad.R;
-
-public class NoteAdapter extends RecyclerView.Adapter<NoteAdapter.NoteItemViewHolder> {
-    private List<NoteBean> list;               // 完整的笔记列表
-    private List<NoteBean> filteredList;       // 筛选后的笔记列表
-    private NoteDbHelper dbHelper;
-    private Context mContext;
-
-    public NoteAdapter(List<NoteBean> list) {
-        this.list = list;
-        this.filteredList = new ArrayList<>(list);
+    inner class NoteItemViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        val textViewTime: TextView = itemView.findViewById(R.id.textViewTime)
+        val textViewTitle: TextView = itemView.findViewById(R.id.textViewTitle)
     }
 
-    // 添加带Context的构造函数
-    public NoteAdapter(List<NoteBean> list, Context context) {
-        this.list = list;
-        this.filteredList = new ArrayList<>(list);
-        this.mContext = context;
-        this.dbHelper = new NoteDbHelper(context);
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): NoteItemViewHolder {
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.note_item, parent, false)
+        return NoteItemViewHolder(view)
     }
 
-    public class NoteItemViewHolder extends RecyclerView.ViewHolder{
-        public TextView textViewTitle;
-        public TextView textViewTime;
-        public CardView cardView;
+    override fun onBindViewHolder(holder: NoteItemViewHolder, position: Int) {
+        val noteBean = filteredList[position]
+        holder.textViewTitle.text = noteBean.title
+        holder.textViewTime.text = noteBean.time
 
-        public NoteItemViewHolder(@NonNull View itemView) {
-            super(itemView);
-            textViewTime = itemView.findViewById(R.id.textViewTime);
-            textViewTitle = itemView.findViewById(R.id.textViewTitle);
-            cardView = itemView.findViewById(R.id.cardView);
-        }
-    }
+        holder.itemView.setOnClickListener {
+            Toast.makeText(
+                holder.itemView.context,
+                "点击${holder.adapterPosition + 1}",
+                Toast.LENGTH_SHORT
+            ).show()
 
-    @NonNull
-    @Override
-    public NoteItemViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.note_item,parent,false);
-        return new NoteItemViewHolder(view);
-    }
-
-    @Override
-    public void onBindViewHolder(@NonNull NoteItemViewHolder holder, int position) {
-        NoteBean noteBean = filteredList.get(position);
-        holder.textViewTitle.setText(noteBean.getTitle());
-        holder.textViewTime.setText(noteBean.getTime());
-
-        holder.itemView.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Toast.makeText(holder.itemView.getContext(), "点击"+(holder.getAdapterPosition()+1), Toast.LENGTH_SHORT).show();
-                Intent intent = new Intent(holder.itemView.getContext(), NoteActivity.class);
-                intent.putExtra("ComeFrom", "NoteAdapter");
-                intent.putExtra("NoteBean", noteBean);
-                holder.itemView.getContext().startActivity(intent);
+            val intent = Intent(holder.itemView.context, NoteActivity::class.java).apply {
+                putExtra("ComeFrom", "NoteAdapter")
+                putExtra("NoteBean", noteBean)
             }
-        });
+            holder.itemView.context.startActivity(intent)
+        }
     }
 
-    @Override
-    public int getItemCount() {
-        if (filteredList != null){
-            return filteredList.size();
-        }
-        return 0;
+    override fun getItemCount(): Int {
+        return filteredList.size
     }
 
     // 添加拖拽排序方法
-    public void moveItem(int fromPosition, int toPosition) {
+    fun moveItem(fromPosition: Int, toPosition: Int) {
         // 只对筛选后的列表进行操作
         if (fromPosition < toPosition) {
-            for (int i = fromPosition; i < toPosition; i++) {
-                Collections.swap(filteredList, i, i + 1);
+            for (i in fromPosition until toPosition) {
+                Collections.swap(filteredList, i, i + 1)
             }
         } else {
-            for (int i = fromPosition; i > toPosition; i--) {
-                Collections.swap(filteredList, i, i - 1);
+            for (i in fromPosition downTo toPosition + 1) {
+                Collections.swap(filteredList, i, i - 1)
             }
         }
         // 通知适配器数据变化
-        notifyItemMoved(fromPosition, toPosition);
+        notifyItemMoved(fromPosition, toPosition)
     }
 
     // 添加滑动删除方法
-    public void removeItem(int position) {
-        if (position < 0 || position >= filteredList.size()) {
-            return;
+    fun removeItem(position: Int) {
+        if (position < 0 || position >= filteredList.size) {
+            return
         }
 
-        NoteBean noteBean = filteredList.get(position);
-        if (dbHelper == null && mContext != null) {
-            dbHelper = new NoteDbHelper(mContext);
-        }
+        val noteBean = filteredList[position]
+        val result = dbHelper?.delete(noteBean) ?: 0
 
-        if (dbHelper != null) {
-            long result = dbHelper.delete(noteBean);
+        if (result > 0) {
+            // 从主列表中移除
+            list.remove(noteBean)
+            // 从筛选列表中移除
+            filteredList.removeAt(position)
 
-            if (result > 0) {
-                // 从主列表中移除
-                list.remove(noteBean);
-                // 从筛选列表中移除
-                filteredList.remove(position);
-
-                notifyItemRemoved(position);
-                if (mContext != null) {
-                    Toast.makeText(mContext, "删除成功！", Toast.LENGTH_SHORT).show();
-                }
-            } else {
-                if (mContext != null) {
-                    Toast.makeText(mContext, "删除失败，请重试！", Toast.LENGTH_SHORT).show();
-                }
-                notifyItemChanged(position);
+            notifyItemRemoved(position)
+            mContext?.let {
+                Toast.makeText(it, "删除成功！", Toast.LENGTH_SHORT).show()
             }
+        } else {
+            mContext?.let {
+                Toast.makeText(it, "删除失败，请重试！", Toast.LENGTH_SHORT).show()
+            }
+            notifyItemChanged(position)
         }
     }
 
     // 添加搜索过滤功能
-    public void filter(String query) {
-        filteredList.clear();
+    fun filter(query: String) {
+        filteredList.clear()
 
         if (query.isEmpty()) {
             // 如果搜索框为空，显示所有笔记
-            filteredList.addAll(list);
+            filteredList.addAll(list)
         } else {
             // 否则根据标题和内容进行过滤
-            String lowerCaseQuery = query.toLowerCase();
+            val lowerCaseQuery = query.lowercase(Locale.getDefault())
 
-            for (NoteBean note : list) {
-                if (note.getTitle().toLowerCase().contains(lowerCaseQuery) ||
-                        note.getContent().toLowerCase().contains(lowerCaseQuery)) {
-                    filteredList.add(note);
+            for (note in list) {
+                if (note.title.lowercase(Locale.getDefault()).contains(lowerCaseQuery) ||
+                    note.content.lowercase(Locale.getDefault()).contains(lowerCaseQuery)
+                ) {
+                    filteredList.add(note)
                 }
             }
         }
 
-        notifyDataSetChanged();
+        notifyDataSetChanged()
     }
 
     // 重新加载数据
-    public void refreshData(List<NoteBean> newList) {
-        this.list = newList;
-        this.filteredList.clear();
-        this.filteredList.addAll(newList);
-        notifyDataSetChanged();
+    fun refreshData(newList: List<NoteBean>) {
+        list.clear()
+        list.addAll(newList)
+        filteredList.clear()
+        filteredList.addAll(newList)
+        notifyDataSetChanged()
     }
 }

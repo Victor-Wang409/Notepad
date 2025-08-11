@@ -1,222 +1,175 @@
 package cn.edu.tju.notepad
 
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
-import android.view.LayoutInflater
-import android.widget.Button
-import android.widget.EditText
-import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import java.io.File
+import java.text.SimpleDateFormat
 import java.util.*
 
-class NoteActivity : AppCompatActivity() {
-
-    private lateinit var editTextTitle: EditText
-    private lateinit var editTextContent: EditText
-    private lateinit var imageContainer: LinearLayout
-    private lateinit var btnAddImage: Button
-
+class NoteActivity : ComponentActivity() {
+    
     private lateinit var noteDbHelper: NoteDbHelper
     private var noteBean: NoteBean? = null
+    private var comeFrom: String = ""
+
+    private val imagePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { handleSelectedImage(it) }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_note)
+        enableEdgeToEdge()
 
-        // 初始化视图
-        initViews()
+        noteDbHelper = NoteDbHelper(this)
+        comeFrom = intent.getStringExtra("ComeFrom") ?: ""
+        noteBean = intent.getSerializableExtra("NoteBean", NoteBean::class.java)
 
-        // 设置数据
-        setupData()
-
-        // 设置监听器
-        setupListeners()
-    }
-
-    private fun initViews() {
-        findViewById<ImageView>(R.id.imageViewBack)
-        editTextTitle = findViewById(R.id.editTextTitle)
-        editTextContent = findViewById(R.id.editTextContent)
-        imageContainer = findViewById(R.id.imageContainer)
-        btnAddImage = findViewById(R.id.btnAddImage)
-    }
-
-    private fun setupData() {
-        // 获取传递的数据
-        val intent = intent
-        val comeFrom = intent.getStringExtra("ComeFrom")
-        noteDbHelper = NoteDbHelper(this@NoteActivity)
-
-        // 如果编辑现有笔记
-        if (comeFrom == "NoteAdapter") {
-            noteBean = intent.getSerializableExtra("NoteBean", NoteBean::class.java)
-            noteBean?.let { note ->
-                editTextTitle.setText(note.title)
-                editTextContent.setText(note.content)
-
-                // 加载图片
-                loadImages()
-            }
-        }
-    }
-
-    private fun setupListeners() {
-        // 返回按钮
-        findViewById<ImageView>(R.id.imageViewBack).setOnClickListener {
-            finish()
-        }
-
-        // 提交按钮
-        val buttonCommit = findViewById<Button>(R.id.buttonCommit)
-        buttonCommit.setOnClickListener {
-            saveNote()
-        }
-
-        // 添加图片按钮
-        btnAddImage.setOnClickListener {
-            ImageUtils.pickImageFromGallery(this@NoteActivity)
-        }
-    }
-
-    private fun saveNote() {
-        // 获取输入内容
-        val title = editTextTitle.text.toString().trim()
-        val content = editTextContent.text.toString().trim()
-
-        if (title.isEmpty() || content.isEmpty()) {
-            Toast.makeText(this@NoteActivity, "标题或内容为空，请补充后再发布", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val intent = intent
-        val comeFrom = intent.getStringExtra("ComeFrom")
-
-        when (comeFrom) {
-            "Add" -> {
-                // 创建新笔记
-                val time = Date().toString()
-                if (noteBean == null) {
-                    noteBean = NoteBean(title, content, time)
-                } else {
-                    noteBean?.apply {
-                        this.title = title
-                        this.content = content
-                        this.time = time
+        setContent {
+            NotepadTheme {
+                NoteEditScreen(
+                    noteBean = noteBean,
+                    comeFrom = comeFrom,
+                    onBackPressed = { finish() },
+                    onSaveNote = { title, content, imagePaths ->
+                        saveNote(title, content, imagePaths)
+                    },
+                    onAddImage = { addImage() },
+                    onDeleteImage = { imagePath ->
+                        // 处理图片删除
+                        deleteImageFile(imagePath)
                     }
-                }
-
-                // 插入到数据库
-                val result = noteDbHelper.insert(noteBean!!)
-                if (result > 0) {
-                    Toast.makeText(this@NoteActivity, "发布成功", Toast.LENGTH_SHORT).show()
-                    finish()
-                } else {
-                    Toast.makeText(this@NoteActivity, "发布失败，请重新发布", Toast.LENGTH_SHORT).show()
-                }
-            }
-            "NoteAdapter" -> {
-                // 编辑现有笔记
-                val currentNote = noteBean!!
-                val noChanges = title == currentNote.title && content == currentNote.content
-
-                if (noChanges) {
-                    Toast.makeText(this@NoteActivity, "没有修改", Toast.LENGTH_SHORT).show()
-                    finish()
-                    return
-                }
-
-                // 显示确认对话框
-                AlertDialog.Builder(this@NoteActivity).apply {
-                    setTitle("是否需要修改？")
-                    setPositiveButton("确定") { _, _ ->
-                        currentNote.apply {
-                            this.title = title
-                            this.content = content
-                            this.time = Date().toString()
-                        }
-
-                        // 更新数据库
-                        val result = noteDbHelper.update(currentNote)
-                        if (result > 0) {
-                            Toast.makeText(this@NoteActivity, "修改成功", Toast.LENGTH_SHORT).show()
-                            finish()
-                        } else {
-                            Toast.makeText(this@NoteActivity, "修改失败，请重试！", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    setNegativeButton("取消", null)
-                    create().show()
-                }
+                )
             }
         }
     }
 
-    private fun loadImages() {
-        noteBean?.imagePaths?.forEach { imagePath ->
-            if (imagePath.isNotEmpty()) {
-                addImageToContainer(imagePath)
-            }
+    private fun addImage() {
+        if (ImageUtils.checkStoragePermission(this)) {
+            imagePickerLauncher.launch("image/*")
+        } else {
+            ImageUtils.requestStoragePermission(this)
         }
     }
 
-    private fun addImageToContainer(imagePath: String) {
+    private fun handleSelectedImage(uri: Uri) {
         try {
-            // 创建图片视图
-            val imageView = LayoutInflater.from(this).inflate(R.layout.image_item, imageContainer, false)
-            val img = imageView.findViewById<ImageView>(R.id.imageViewItem)
-            val btnDelete = imageView.findViewById<ImageView>(R.id.btnDeleteImage)
-
-            // 设置图片
-            val imgFile = File(imagePath)
-            if (imgFile.exists()) {
-                val bitmap = BitmapFactory.decodeFile(imagePath)
-                img.setImageBitmap(bitmap)
-
-                // 设置删除按钮动作
-                btnDelete.setOnClickListener {
-                    // 从容器中移除视图
-                    imageContainer.removeView(imageView)
-
-                    // 从笔记中移除图片路径
-                    noteBean?.imagePaths?.remove(imagePath)
+            val imagePath = ImageUtils.copyUriToPrivateStorage(this, uri)
+            if (imagePath.isNotEmpty()) {
+                // 更新当前笔记的图片路径列表
+                if (noteBean == null) {
+                    noteBean = NoteBean(
+                        id = 0,
+                        title = "",
+                        content = "",
+                        time = "",
+                        imagePaths = mutableListOf(imagePath)
+                    )
+                } else {
+                    noteBean?.imagePaths?.add(imagePath)
                 }
-
-                // 添加视图到容器
-                imageContainer.addView(imageView)
+                Toast.makeText(this, "图片添加成功", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
             e.printStackTrace()
+            Toast.makeText(this, "图片添加失败: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (resultCode == RESULT_OK) {
-            if (requestCode == ImageUtils.REQUEST_IMAGE_PICK && data != null) {
-                // 图库选择结果
-                val selectedImage: Uri? = data.data
-                selectedImage?.let { uri ->
-                    val imagePath = ImageUtils.copyUriToPrivateStorage(this, uri)
+    private fun saveNote(title: String, content: String, imagePaths: List<String>) {
+        if (title.trim().isEmpty() && content.trim().isEmpty()) {
+            Toast.makeText(this, "标题和内容不能都为空", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-                    if (imagePath.isNotEmpty()) {
-                        // 添加图片到UI
-                        addImageToContainer(imagePath)
+        val currentTime = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
 
-                        // 添加图片路径到笔记
-                        if (noteBean == null) {
-                            noteBean = NoteBean("", "", "")
+        try {
+            when (comeFrom) {
+                "Add" -> {
+                    val newNote = NoteBean(
+                        id = 0,
+                        title = title,
+                        content = content,
+                        time = currentTime,
+                        imagePaths = imagePaths.toMutableList()
+                    )
+                    val result = noteDbHelper.insert(newNote)
+                    if (result > 0) {
+                        Toast.makeText(this, "保存成功", Toast.LENGTH_SHORT).show()
+                        finish()
+                    } else {
+                        Toast.makeText(this, "保存失败", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                "NoteAdapter" -> {
+                    noteBean?.let { note ->
+                        val hasChanges = note.title != title ||
+                                       note.content != content ||
+                                       note.imagePaths != imagePaths
+
+                        if (hasChanges) {
+                            note.title = title
+                            note.content = content
+                            note.time = currentTime
+                            note.imagePaths = imagePaths.toMutableList()
+
+                            val result = noteDbHelper.update(note)
+                            if (result > 0) {
+                                Toast.makeText(this, "更新成功", Toast.LENGTH_SHORT).show()
+                                finish()
+                            } else {
+                                Toast.makeText(this, "更新失败", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            finish()
                         }
-                        noteBean?.addImagePath(imagePath)
                     }
                 }
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "操作失败: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun deleteImageFile(imagePath: String) {
+        try {
+            val file = File(imagePath)
+            if (file.exists()) {
+                file.delete()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -226,17 +179,238 @@ class NoteActivity : AppCompatActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        when (requestCode) {
+            ImageUtils.REQUEST_STORAGE_PERMISSION -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    imagePickerLauncher.launch("image/*")
+                } else {
+                    Toast.makeText(this, "需要存储权限才能添加图片", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
-        if (requestCode == ImageUtils.REQUEST_STORAGE_PERMISSION) {
-            // 检查是否所有请求的权限都被授予
-            val allGranted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+}
 
-            if (allGranted) {
-                // 所有权限都被授予，可以选择图片
-                ImageUtils.pickImageFromGallery(this)
-            } else {
-                // 用户拒绝了某些权限
-                Toast.makeText(this, "需要存储权限才能上传图片", Toast.LENGTH_LONG).show()
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NoteEditScreen(
+    noteBean: NoteBean?,
+    comeFrom: String,
+    onBackPressed: () -> Unit,
+    onSaveNote: (String, String, List<String>) -> Unit,
+    onAddImage: () -> Unit,
+    onDeleteImage: (String) -> Unit
+) {
+    var title by remember { mutableStateOf(noteBean?.title ?: "") }
+    var content by remember { mutableStateOf(noteBean?.content ?: "") }
+    var imagePaths by remember { mutableStateOf(noteBean?.imagePaths?.toMutableList() ?: mutableListOf<String>()) }
+    var showConfirmDialog by remember { mutableStateOf(false) }
+
+    // 监听noteBean的变化，更新imagePaths
+    LaunchedEffect(noteBean?.imagePaths) {
+        noteBean?.imagePaths?.let { paths ->
+            imagePaths = paths.toMutableList()
+        }
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = if (comeFrom == "Add") "新建笔记" else "编辑笔记",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBackPressed) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            if (comeFrom == "NoteAdapter" && noteBean != null) {
+                                val hasChanges = noteBean.title != title ||
+                                               noteBean.content != content ||
+                                               noteBean.imagePaths != imagePaths
+                                if (hasChanges) {
+                                    showConfirmDialog = true
+                                } else {
+                                    onBackPressed()
+                                }
+                            } else {
+                                onSaveNote(title, content, imagePaths.toList())
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = "保存")
+                    }
+                }
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = onAddImage,
+                containerColor = MaterialTheme.colorScheme.secondary
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "添加图片")
+            }
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            // 标题输入框
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("标题") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                singleLine = true
+            )
+
+            // 内容输入框
+            OutlinedTextField(
+                value = content,
+                onValueChange = { content = it },
+                label = { Text("内容") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp)
+                    .padding(bottom = 16.dp),
+                maxLines = Int.MAX_VALUE
+            )
+
+            // 图片列表
+            if (imagePaths.isNotEmpty()) {
+                Text(
+                    text = "图片 (${imagePaths.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                LazyColumn(
+                    modifier = Modifier.height(200.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(imagePaths.size) { index ->
+                        val imagePath = imagePaths[index]
+                        ImageItem(
+                            imagePath = imagePath,
+                            onDeleteImage = { pathToDelete ->
+                                imagePaths.remove(pathToDelete)
+                                onDeleteImage(pathToDelete)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // 确认对话框
+    if (showConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmDialog = false },
+            title = { Text("保存修改") },
+            text = { Text("是否需要保存修改？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showConfirmDialog = false
+                        onSaveNote(title, content, imagePaths.toList())
+                    }
+                ) {
+                    Text("保存")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showConfirmDialog = false
+                        onBackPressed()
+                    }
+                ) {
+                    Text("不保存")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun ImageItem(
+    imagePath: String,
+    onDeleteImage: (String) -> Unit
+) {
+    Box(
+        modifier = Modifier.size(120.dp)
+    ) {
+        Card(
+            modifier = Modifier.fillMaxSize(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            val bitmap = remember(imagePath) {
+                try {
+                    val file = File(imagePath)
+                    if (file.exists()) {
+                        BitmapFactory.decodeFile(imagePath)
+                    } else {
+                        null
+                    }
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            
+            bitmap?.let {
+                Image(
+                    bitmap = it.asImageBitmap(),
+                    contentDescription = "图片",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } ?: Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "图片加载失败",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+        
+        // 删除按钮
+        IconButton(
+            onClick = { onDeleteImage(imagePath) },
+            modifier = Modifier.align(Alignment.TopEnd)
+        ) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.error
+                ),
+                shape = CircleShape
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "删除图片",
+                    tint = MaterialTheme.colorScheme.onError,
+                    modifier = Modifier.padding(4.dp)
+                )
             }
         }
     }

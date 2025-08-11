@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
@@ -29,25 +28,12 @@ object ImageUtils {
      */
     fun checkStoragePermission(activity: Activity): Boolean {
         return when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> { // Android 13及以上
+            true -> { // Android 13及以上
                 if (ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_MEDIA_IMAGES)
                     != PackageManager.PERMISSION_GRANTED) {
                     ActivityCompat.requestPermissions(
                         activity,
                         arrayOf(Manifest.permission.READ_MEDIA_IMAGES),
-                        REQUEST_STORAGE_PERMISSION
-                    )
-                    false
-                } else {
-                    true
-                }
-            }
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> { // Android 10-12
-                if (ContextCompat.checkSelfPermission(activity, Manifest.permission.READ_EXTERNAL_STORAGE)
-                    != PackageManager.PERMISSION_GRANTED) {
-                    ActivityCompat.requestPermissions(
-                        activity,
-                        arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE),
                         REQUEST_STORAGE_PERMISSION
                     )
                     false
@@ -121,5 +107,13 @@ object ImageUtils {
             Toast.makeText(context, "保存图片失败: ${e.message}", Toast.LENGTH_SHORT).show()
             ""
         }
+    }
+
+    /**
+     * 请求存储权限（用于兼容性，实际权限检查在checkStoragePermission中完成）
+     */
+    fun requestStoragePermission(context: Context) {
+        // 这个方法主要用于兼容性，实际的权限请求在checkStoragePermission中处理
+        Toast.makeText(context, "请允许存储权限以添加图片", Toast.LENGTH_SHORT).show()
     }
 }

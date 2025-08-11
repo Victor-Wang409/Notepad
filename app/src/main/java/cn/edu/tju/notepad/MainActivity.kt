@@ -2,110 +2,131 @@ package cn.edu.tju.notepad
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.MenuItem
-import android.view.View
-import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
-import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentManager
-import androidx.fragment.app.FragmentTransaction
-import com.google.android.material.bottomnavigation.BottomNavigationView
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 
-class MainActivity : AppCompatActivity() {
+sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
+    object Notes : Screen("notes", "笔记", Icons.Default.AddCircle)
+    object User : Screen("user", "用户", Icons.Default.Person)
+}
 
-    private lateinit var titleTextView: TextView
-    private lateinit var bottomNavigationView: BottomNavigationView
-    private lateinit var fabAddNote: FloatingActionButton
-
-    private lateinit var noteFragment: NoteFragment
-    private lateinit var userFragment: UserFragment
-    private lateinit var activeFragment: Fragment
-
+class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        // 初始化Views
-        titleTextView = findViewById(R.id.textView)
-        bottomNavigationView = findViewById(R.id.bottom_navigation)
-        fabAddNote = findViewById(R.id.fab_add_note)
-
-        // 初始化Fragments
-        if (savedInstanceState == null) {
-            // 只在首次创建时初始化Fragment，避免重复创建
-            noteFragment = NoteFragment()
-            userFragment = UserFragment()
-
-            // 初始化时添加所有Fragment并隐藏非默认的Fragment
-            val fragmentManager: FragmentManager = supportFragmentManager
-            val transaction: FragmentTransaction = fragmentManager.beginTransaction()
-            transaction.add(R.id.fragment_container, userFragment).hide(userFragment)
-            transaction.add(R.id.fragment_container, noteFragment)
-            transaction.commit()
-
-            activeFragment = noteFragment
-        }
-
-        setupBottomNavigation()
-
-        setupFAB()
-
-        // 设置默认标题
-        setTitle("笔记")
-    }
-
-    private fun setupBottomNavigation() {
-        bottomNavigationView.setOnItemSelectedListener { item: MenuItem ->
-            when (item.itemId) {
-                R.id.navigation_notes -> {
-                    switchFragment(noteFragment)
-                    setTitle("笔记")
-                    fabAddNote.visibility = View.VISIBLE
-                    true
-                }
-                R.id.navigation_user -> {
-                    switchFragment(userFragment)
-                    setTitle("用户")
-                    fabAddNote.visibility = View.GONE
-                    true
-                }
-                else -> false
+        enableEdgeToEdge()
+        setContent {
+            NotepadTheme {
+                MainScreen()
             }
         }
     }
+}
 
-    private fun setupFAB() {
-        fabAddNote.setOnClickListener {
-            val intent = Intent(this@MainActivity, NoteActivity::class.java)
-            intent.putExtra("ComeFrom", "Add")
-            startActivity(intent)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainScreen() {
+    val navController = rememberNavController()
+    val screens = listOf(Screen.Notes, Screen.User)
+    
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            val navBackStackEntry by navController.currentBackStackEntryAsState()
+            val currentDestination = navBackStackEntry?.destination
+            val currentRoute = currentDestination?.route
+            
+            val title = screens.find { it.route == currentRoute }?.title ?: "笔记"
+            
+            CenterAlignedTopAppBar(
+                title = { Text(title) }
+            )
+        },
+        bottomBar = {
+            NavigationBar {
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentDestination = navBackStackEntry?.destination
+                
+                screens.forEach { screen ->
+                    NavigationBarItem(
+                        icon = { Icon(screen.icon, contentDescription = screen.title) },
+                        label = { Text(screen.title) },
+                        selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
+                        onClick = {
+                            navController.navigate(screen.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+                }
+            }
+        },
+        floatingActionButton = {
+            val navBackStackEntry by navController.currentBackStackEntryAsState()
+            val currentRoute = navBackStackEntry?.destination?.route
+            
+            if (currentRoute == Screen.Notes.route) {
+                val context = LocalContext.current
+                FloatingActionButton(
+                    onClick = {
+                        val intent = Intent(context, NoteActivity::class.java)
+                        intent.putExtra("ComeFrom", "Add")
+                        context.startActivity(intent)
+                    }
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "添加笔记")
+                }
+            }
+        }
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = Screen.Notes.route,
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            composable(Screen.Notes.route) {
+                NoteScreen()
+            }
+            composable(Screen.User.route) {
+                UserScreen()
+            }
         }
     }
+}
 
-    private fun switchFragment(targetFragment: Fragment) {
-        if (activeFragment == targetFragment) return
+@Composable
+fun NotepadTheme(content: @Composable () -> Unit) {
+    MaterialTheme(
+        content = content
+    )
+}
 
-        val transaction: FragmentTransaction = supportFragmentManager.beginTransaction()
-        transaction.hide(activeFragment).show(targetFragment).commit()
-        activeFragment = targetFragment
-
-        // 如果目标是笔记Fragment，手动触发刷新
-        if (targetFragment is NoteFragment) {
-            targetFragment.refreshNotes()
-        }
-    }
-
-    private fun setTitle(title: String) {
-        titleTextView.text = title
-    }
-
-    override fun onResume() {
-        super.onResume()
-
-        // 应用恢复前台时，如果当前显示的是笔记Fragment，刷新数据
-        if (activeFragment is NoteFragment) {
-            (activeFragment as NoteFragment).refreshNotes()
-        }
+@Preview(showBackground = true)
+@Composable
+fun MainScreenPreview() {
+    NotepadTheme {
+        MainScreen()
     }
 }

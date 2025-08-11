@@ -33,22 +33,14 @@ class NoteDbHelper(context: Context?) : SQLiteOpenHelper(
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) {
-            // 添加新的列：图片路径
-            val addColumnSql = "ALTER TABLE $TABLE_NAME ADD COLUMN image_paths TEXT DEFAULT ''"
-            db.execSQL(addColumnSql)
-
-            // 更新内容列的长度限制
-            val renameSql = "ALTER TABLE $TABLE_NAME RENAME TO temp_$TABLE_NAME"
-            db.execSQL(renameSql)
-
+            db.execSQL("ALTER TABLE $TABLE_NAME ADD COLUMN image_paths TEXT DEFAULT ''")
+            db.execSQL("ALTER TABLE $TABLE_NAME RENAME TO temp_$TABLE_NAME")
             onCreate(db)
-
-            val insertSql =
-                "INSERT INTO $TABLE_NAME(_id, title, content, time) SELECT _id, title, content, time FROM temp_$TABLE_NAME"
-            db.execSQL(insertSql)
-
-            val dropSql = "DROP TABLE temp_$TABLE_NAME"
-            db.execSQL(dropSql)
+            db.execSQL(
+                "INSERT INTO $TABLE_NAME(_id, title, content, time) " +
+                        "SELECT _id, title, content, time FROM temp_$TABLE_NAME"
+            )
+            db.execSQL("DROP TABLE temp_$TABLE_NAME")
         }
     }
 
@@ -74,7 +66,6 @@ class NoteDbHelper(context: Context?) : SQLiteOpenHelper(
                 val time = it.getString(it.getColumnIndexOrThrow("time"))
                 val id = it.getInt(it.getColumnIndexOrThrow("_id"))
 
-                // 获取图片路径
                 val imagePathsStr = if (it.getColumnIndex("image_paths") != -1) {
                     it.getString(it.getColumnIndexOrThrow("image_paths")) ?: ""
                 } else {

@@ -16,6 +16,8 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
@@ -31,17 +33,42 @@ fun NoteScreen() {
 
     val noteDbHelper = remember { NoteDbHelper(context) }
 
+
+    // 创建刷新笔记列表的函数
+    val refreshNotes = remember {
+        {
+            lifecycleOwner.lifecycleScope.launch {
+                try {
+                    isLoading = true
+                    val notesList = noteDbHelper.query()
+                    notes = notesList
+                    isLoading = false
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    isLoading = false
+                }
+            }
+        }
+    }
+
     // 加载笔记数据
     LaunchedEffect(Unit) {
-        lifecycleOwner.lifecycleScope.launch {
-            try {
-                val notesList = noteDbHelper.query()
-                notes = notesList
-                isLoading = false
-            } catch (e: Exception) {
-                e.printStackTrace()
-                isLoading = false
+        refreshNotes()
+    }
+
+    // 监听生命周期事件，当从其他Activity返回时自动刷新
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                // 当Activity恢复时刷新笔记列表
+                refreshNotes()
             }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 

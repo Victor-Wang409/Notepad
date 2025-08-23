@@ -30,13 +30,17 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import cn.edu.tju.notepad.sync.SyncManager
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
 class NoteActivity : ComponentActivity() {
-    
+
     private lateinit var noteDbHelper: NoteDbHelper
+    private lateinit var syncManager: SyncManager
     private var noteBean: NoteBean? = null
     private var comeFrom: String = ""
 
@@ -51,6 +55,7 @@ class NoteActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         noteDbHelper = NoteDbHelper(this)
+        syncManager = SyncManager(this, noteDbHelper)
         comeFrom = intent.getStringExtra("ComeFrom") ?: ""
         noteBean = intent.getSerializableExtra("NoteBean", NoteBean::class.java)
 
@@ -92,10 +97,15 @@ class NoteActivity : ComponentActivity() {
                         title = "",
                         content = "",
                         time = "",
-                        imagePaths = mutableListOf(imagePath)
+                        imagePaths = mutableListOf(imagePath),
+                        serverId = 0,
+                        lastModified = System.currentTimeMillis(),
+                        syncStatus = SyncStatus.LOCAL_ONLY,
+                        needsUpload = true
                     )
                 } else {
                     noteBean?.imagePaths?.add(imagePath)
+                    noteBean?.markAsModified()
                 }
                 Toast.makeText(this, "图片添加成功", Toast.LENGTH_SHORT).show()
             }
@@ -121,11 +131,25 @@ class NoteActivity : ComponentActivity() {
                         title = title,
                         content = content,
                         time = currentTime,
-                        imagePaths = imagePaths.toMutableList()
+                        imagePaths = imagePaths.toMutableList(),
+                        serverId = 0,
+                        lastModified = System.currentTimeMillis(),
+                        syncStatus = SyncStatus.LOCAL_ONLY,
+                        needsUpload = true
                     )
                     val result = noteDbHelper.insert(newNote)
                     if (result > 0) {
                         Toast.makeText(this, "保存成功", Toast.LENGTH_SHORT).show()
+
+                        // 后台同步（可选）
+                        lifecycleScope.launch {
+                            try {
+                                syncManager.syncNotes()
+                            } catch (e: Exception) {
+                                // 静默处理同步错误，不影响用户体验
+                            }
+                        }
+
                         finish()
                     } else {
                         Toast.makeText(this, "保存失败", Toast.LENGTH_SHORT).show()
@@ -134,18 +158,30 @@ class NoteActivity : ComponentActivity() {
                 "NoteAdapter" -> {
                     noteBean?.let { note ->
                         val hasChanges = note.title != title ||
-                                       note.content != content ||
-                                       note.imagePaths != imagePaths
+                                note.content != content ||
+                                note.imagePaths != imagePaths
 
                         if (hasChanges) {
                             note.title = title
                             note.content = content
                             note.time = currentTime
                             note.imagePaths = imagePaths.toMutableList()
+                            // 标记为已修改，需要同步
+                            note.markAsModified()
 
                             val result = noteDbHelper.update(note)
                             if (result > 0) {
                                 Toast.makeText(this, "更新成功", Toast.LENGTH_SHORT).show()
+
+                                // 后台同步（可选）
+                                lifecycleScope.launch {
+                                    try {
+                                        syncManager.syncNotes()
+                                    } catch (e: Exception) {
+                                        // 静默处理同步错误，不影响用户体验
+                                    }
+                                }
+
                                 finish()
                             } else {
                                 Toast.makeText(this, "更新失败", Toast.LENGTH_SHORT).show()
@@ -189,7 +225,6 @@ class NoteActivity : ComponentActivity() {
             }
         }
     }
-
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -234,8 +269,8 @@ fun NoteEditScreen(
                         onClick = {
                             if (comeFrom == "NoteAdapter" && noteBean != null) {
                                 val hasChanges = noteBean.title != title ||
-                                               noteBean.content != content ||
-                                               noteBean.imagePaths != imagePaths
+                                        noteBean.content != content ||
+                                        noteBean.imagePaths != imagePaths
                                 if (hasChanges) {
                                     showConfirmDialog = true
                                 } else {
@@ -372,7 +407,7 @@ fun ImageItem(
                     null
                 }
             }
-            
+
             bitmap?.let {
                 Image(
                     bitmap = it.asImageBitmap(),
@@ -393,7 +428,7 @@ fun ImageItem(
                 )
             }
         }
-        
+
         // 删除按钮
         IconButton(
             onClick = { onDeleteImage(imagePath) },

@@ -78,15 +78,25 @@ fun NoteItemCard(
             Column(
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // 标题
-                Text(
-                    text = note.title.ifEmpty { "无标题" },
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                // 标题和同步状态
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = note.title.ifEmpty { "无标题" },
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    // 同步状态指示器
+                    SyncStatusIndicator(syncStatus = note.syncStatus)
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -165,4 +175,21 @@ fun NoteItemCard(
             }
         )
     }
+}
+
+@Composable
+fun SyncStatusIndicator(syncStatus: SyncStatus) {
+    val (icon, color, description) = when (syncStatus) {
+        SyncStatus.LOCAL_ONLY -> Triple("📱", MaterialTheme.colorScheme.outline, "仅本地")
+        SyncStatus.SYNCED -> Triple("✅", MaterialTheme.colorScheme.primary, "已同步")
+        SyncStatus.MODIFIED -> Triple("📝", MaterialTheme.colorScheme.tertiary, "待同步")
+        SyncStatus.UPLOADING -> Triple("⏳", MaterialTheme.colorScheme.secondary, "同步中")
+        SyncStatus.CONFLICT -> Triple("⚠️", MaterialTheme.colorScheme.error, "冲突")
+    }
+
+    Text(
+        text = icon,
+        fontSize = 16.sp,
+        color = color
+    )
 }

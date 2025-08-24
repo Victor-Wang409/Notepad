@@ -16,7 +16,7 @@ class NetworkClient(private val context: Context) {
     private val sharedPrefs: SharedPreferences =
         context.getSharedPreferences("sync_settings", Context.MODE_PRIVATE)
 
-    private val defaultServerUrl = "http://10.21.48.235:3000/"
+    private val defaultServerUrl = "http://192.168.1.101:3000/"
 
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)

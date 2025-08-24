@@ -8,95 +8,46 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * 百度文心一言API客户端
+ * 百度文心一言API客户端 - 使用新版API
  */
 class WenxinApiClient(private val context: Context) {
 
     companion object {
         private const val TAG = "WenxinApiClient"
 
-        // API端点
-        private const val TOKEN_URL = "https://aip.baidubce.com/oauth/2.0/token"
-        private const val CHAT_BASE_URL = "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/"
+        // 新版API端点
+        private const val API_URL = "https://qianfan.baidubce.com/v2/chat/completions"
 
-        // 缓存的access token
-        private var accessToken: String? = null
-        private var tokenExpireTime: Long = 0
+        // 默认配置
+        private const val DEFAULT_MAX_TOKENS = 2000
+        private const val DEFAULT_TEMPERATURE = 0.7
     }
 
     private val configManager = AiConfigManager(context)
 
+    // 配置HTTP客户端，增加读取超时时间
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(300, TimeUnit.SECONDS)  // AI响应可能较慢，设置5分钟超时
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
     /**
-     * 获取Access Token
-     */
-    private suspend fun getAccessToken(): String? = withContext(Dispatchers.IO) {
-        try {
-            // 检查缓存的token是否有效
-            if (accessToken != null && System.currentTimeMillis() < tokenExpireTime) {
-                return@withContext accessToken
-            }
-
-            val apiKey = configManager.getApiKey()
-            val secretKey = configManager.getSecretKey()
-
-            if (!configManager.isConfigured()) {
-                Log.e(TAG, "API密钥未配置")
-                return@withContext null
-            }
-
-            val url = "$TOKEN_URL?grant_type=client_credentials&client_id=$apiKey&client_secret=$secretKey"
-            val request = Request.Builder()
-                .url(url)
-                .post("".toRequestBody())
-                .build()
-
-            val response = client.newCall(request).execute()
-            if (response.isSuccessful) {
-                val responseBody = response.body?.string()
-                val json = JSONObject(responseBody ?: "{}")
-
-                accessToken = json.optString("access_token")
-                val expiresIn = json.optLong("expires_in", 0)
-
-                // 设置过期时间，提前5分钟刷新
-                tokenExpireTime = System.currentTimeMillis() + (expiresIn - 300) * 1000
-
-                Log.d(TAG, "获取Access Token成功")
-                return@withContext accessToken
-            } else {
-                Log.e(TAG, "获取Access Token失败: ${response.code}")
-                return@withContext null
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "获取Access Token异常", e)
-            return@withContext null
-        }
-    }
-
-    /**
      * 生成笔记内容
-     * @param prompt 用户输入的提示词
-     * @param style 生成风格（formal/casual/creative）
-     * @return 生成的内容，失败返回null
      */
     suspend fun generateNoteContent(
         prompt: String,
         style: GenerationStyle = GenerationStyle.NORMAL
     ): GeneratedNote? = withContext(Dispatchers.IO) {
         try {
-            val token = getAccessToken()
-            if (token == null) {
-                Log.e(TAG, "无法获取Access Token")
+            // 检查配置
+            if (!configManager.isConfigured()) {
+                Log.e(TAG, "API未配置")
                 return@withContext null
             }
 
@@ -115,62 +66,26 @@ class WenxinApiClient(private val context: Context) {
                 用户需求：$prompt
                 
                 请生成一篇结构清晰的笔记，包含：
-                1. 一个简洁的标题
-                2. 主要内容（分段落组织）
+                1. 一个简洁的标题（不超过20个字）
+                2. 主要内容（分段落组织，使用markdown格式）
                 3. 如果适用，可以包含要点列表
                 
-                请直接返回JSON格式：
+                请严格按照以下JSON格式返回，不要包含markdown代码块标记：
                 {
                     "title": "笔记标题",
-                    "content": "笔记内容"
+                    "content": "笔记内容（使用markdown格式）"
                 }
             """.trimIndent()
 
-            val requestBody = JSONObject().apply {
-                put("messages", org.json.JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("role", "user")
-                        put("content", fullPrompt)
-                    })
-                })
-                put("temperature", 0.7)
-                put("top_p", 0.8)
-                put("penalty_score", 1.0)
-            }
+            // 构建请求体
+            val requestBody = buildRequestBody(fullPrompt)
 
-            val modelType = configManager.getModelType()
-            val chatUrl = CHAT_BASE_URL + modelType.endpoint
-            val url = "$chatUrl?access_token=$token"
-            val request = Request.Builder()
-                .url(url)
-                .post(requestBody.toString().toRequestBody("application/json".toMediaType()))
-                .build()
+            // 发起请求
+            val response = executeRequest(requestBody)
 
-            val response = client.newCall(request).execute()
-            if (response.isSuccessful) {
-                val responseBody = response.body?.string()
-                val json = JSONObject(responseBody ?: "{}")
+            // 解析响应
+            return@withContext parseGenerateResponse(response, prompt)
 
-                val result = json.optString("result", "")
-
-                // 尝试解析JSON格式的响应
-                return@withContext try {
-                    val resultJson = JSONObject(result)
-                    GeneratedNote(
-                        title = resultJson.optString("title", "AI生成的笔记"),
-                        content = resultJson.optString("content", result)
-                    )
-                } catch (e: Exception) {
-                    // 如果不是JSON格式，直接使用原始内容
-                    GeneratedNote(
-                        title = "AI生成的笔记 - ${prompt.take(20)}",
-                        content = result
-                    )
-                }
-            } else {
-                Log.e(TAG, "生成内容失败: ${response.code}")
-                return@withContext null
-            }
         } catch (e: Exception) {
             Log.e(TAG, "生成内容异常", e)
             return@withContext null
@@ -186,68 +101,43 @@ class WenxinApiClient(private val context: Context) {
         improveType: ImproveType
     ): GeneratedNote? = withContext(Dispatchers.IO) {
         try {
-            val token = getAccessToken()
-            if (token == null) {
-                Log.e(TAG, "无法获取Access Token")
+            if (!configManager.isConfigured()) {
+                Log.e(TAG, "API未配置")
                 return@withContext null
             }
 
             val prompt = when (improveType) {
                 ImproveType.GRAMMAR -> "请修正以下笔记的语法错误和拼写错误，保持原意不变。"
-                ImproveType.EXPAND -> "请扩展以下笔记的内容，添加更多细节和说明。"
-                ImproveType.SIMPLIFY -> "请简化以下笔记的内容，使其更加简洁明了。"
-                ImproveType.STRUCTURE -> "请重新组织以下笔记的结构，使其更有条理。"
-                ImproveType.PROFESSIONAL -> "请将以下笔记改写得更加专业和正式。"
+                ImproveType.EXPAND -> "请扩展以下笔记的内容，添加更多细节和说明，使其更加充实。"
+                ImproveType.SIMPLIFY -> "请简化以下笔记的内容，提炼要点，使其更加简洁明了。"
+                ImproveType.STRUCTURE -> "请重新组织以下笔记的结构，添加合适的段落和标题，使其更有条理。"
+                ImproveType.PROFESSIONAL -> "请将以下笔记改写得更加专业和正式，适合商务场合。"
             }
 
             val fullPrompt = """
                 $prompt
                 
                 原始标题：$title
-                原始内容：$content
+                原始内容：
+                $content
                 
-                请返回优化后的JSON格式：
+                请返回优化后的内容，格式要求：
+                1. 保持原意不变
+                2. 使用markdown格式
+                3. 结构清晰，易于阅读
+                
+                请严格按照以下JSON格式返回：
                 {
                     "title": "优化后的标题",
-                    "content": "优化后的内容"
+                    "content": "优化后的内容（markdown格式）"
                 }
             """.trimIndent()
 
-            val requestBody = JSONObject().apply {
-                put("messages", org.json.JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("role", "user")
-                        put("content", fullPrompt)
-                    })
-                })
-                put("temperature", 0.5)
-            }
+            val requestBody = buildRequestBody(fullPrompt)
+            val response = executeRequest(requestBody)
 
-            val url = "$CHAT_BASE_URL?access_token=$token"
-            val request = Request.Builder()
-                .url(url)
-                .post(requestBody.toString().toRequestBody("application/json".toMediaType()))
-                .build()
+            return@withContext parseImproveResponse(response, title, content)
 
-            val response = client.newCall(request).execute()
-            if (response.isSuccessful) {
-                val responseBody = response.body?.string()
-                val json = JSONObject(responseBody ?: "{}")
-                val result = json.optString("result", "")
-
-                return@withContext try {
-                    val resultJson = JSONObject(result)
-                    GeneratedNote(
-                        title = resultJson.optString("title", title),
-                        content = resultJson.optString("content", content)
-                    )
-                } catch (e: Exception) {
-                    GeneratedNote(title = title, content = result)
-                }
-            } else {
-                Log.e(TAG, "优化内容失败: ${response.code}")
-                return@withContext null
-            }
         } catch (e: Exception) {
             Log.e(TAG, "优化内容异常", e)
             return@withContext null
@@ -255,11 +145,205 @@ class WenxinApiClient(private val context: Context) {
     }
 
     /**
-     * 根据关键词生成笔记大纲
+     * 构建请求体
      */
-    suspend fun generateOutline(keywords: List<String>): GeneratedNote? = withContext(Dispatchers.IO) {
-        val prompt = "请根据以下关键词生成一个详细的笔记大纲：${keywords.joinToString(", ")}"
-        return@withContext generateNoteContent(prompt, GenerationStyle.DETAILED)
+    private fun buildRequestBody(userContent: String): String {
+        val modelType = configManager.getModelType()
+
+        val json = JSONObject().apply {
+            // 使用配置的模型
+            put("model", modelType.modelCode)
+
+            // 构建消息数组
+            put("messages", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("content", userContent)
+                })
+            })
+
+            // 禁用网络搜索（纯生成任务）
+            put("web_search", JSONObject().apply {
+                put("enable", false)
+                put("enable_citation", false)
+                put("enable_trace", false)
+            })
+
+            // 空的插件选项
+            put("plugin_options", JSONObject())
+
+            // 添加其他参数
+            put("temperature", DEFAULT_TEMPERATURE)
+            put("max_tokens", DEFAULT_MAX_TOKENS)
+        }
+
+        return json.toString()
+    }
+
+    /**
+     * 执行HTTP请求
+     */
+    private fun executeRequest(requestBody: String): String? {
+        try {
+            val appId = configManager.getAppId()
+            val bearerToken = configManager.getBearerToken()
+
+            if (bearerToken.isEmpty()) {
+                Log.e(TAG, "Bearer Token未配置")
+                return null
+            }
+
+            val mediaType = "application/json".toMediaType()
+            val body = requestBody.toRequestBody(mediaType)
+
+            val request = Request.Builder()
+                .url(API_URL)
+                .post(body)
+                .addHeader("Content-Type", "application/json")
+                .addHeader("appid", appId)
+                .addHeader("Authorization", "Bearer $bearerToken")
+                .build()
+
+            Log.d(TAG, "发送请求: $API_URL")
+
+            val response = client.newCall(request).execute()
+
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string()
+                Log.d(TAG, "响应成功: ${responseBody?.take(200)}")
+                return responseBody
+            } else {
+                val errorBody = response.body?.string()
+                Log.e(TAG, "请求失败: ${response.code} - $errorBody")
+                return null
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "请求异常", e)
+            return null
+        }
+    }
+
+    /**
+     * 解析生成响应
+     */
+    private fun parseGenerateResponse(response: String?, originalPrompt: String): GeneratedNote? {
+        if (response.isNullOrEmpty()) return null
+
+        try {
+            val json = JSONObject(response)
+
+            // 检查是否有错误
+            if (json.has("error")) {
+                val error = json.getJSONObject("error")
+                Log.e(TAG, "API错误: ${error.optString("message")}")
+                return null
+            }
+
+            // 获取AI生成的内容
+            val choices = json.optJSONArray("choices")
+            if (choices != null && choices.length() > 0) {
+                val choice = choices.getJSONObject(0)
+                val message = choice.getJSONObject("message")
+                val content = message.getString("content")
+
+                // 尝试解析JSON格式的内容
+                return try {
+                    val cleanContent = content
+                        .replace("```json", "")
+                        .replace("```", "")
+                        .trim()
+
+                    val resultJson = JSONObject(cleanContent)
+                    GeneratedNote(
+                        title = resultJson.optString("title", "AI生成的笔记"),
+                        content = resultJson.optString("content", content)
+                    )
+                } catch (e: Exception) {
+                    // 如果不是JSON格式，直接使用原始内容
+                    Log.w(TAG, "无法解析为JSON，使用原始内容")
+                    val title = "AI笔记 - ${originalPrompt.take(15)}${if(originalPrompt.length > 15) "..." else ""}"
+                    GeneratedNote(title = title, content = content)
+                }
+            }
+
+            return null
+
+        } catch (e: Exception) {
+            Log.e(TAG, "解析响应失败", e)
+            return null
+        }
+    }
+
+    /**
+     * 解析优化响应
+     */
+    private fun parseImproveResponse(response: String?, originalTitle: String, originalContent: String): GeneratedNote? {
+        if (response.isNullOrEmpty()) return null
+
+        try {
+            val json = JSONObject(response)
+
+            // 检查错误
+            if (json.has("error")) {
+                val error = json.getJSONObject("error")
+                Log.e(TAG, "API错误: ${error.optString("message")}")
+                return null
+            }
+
+            // 获取内容
+            val choices = json.optJSONArray("choices")
+            if (choices != null && choices.length() > 0) {
+                val choice = choices.getJSONObject(0)
+                val message = choice.getJSONObject("message")
+                val content = message.getString("content")
+
+                // 尝试解析JSON格式
+                return try {
+                    val cleanContent = content
+                        .replace("```json", "")
+                        .replace("```", "")
+                        .trim()
+
+                    val resultJson = JSONObject(cleanContent)
+                    GeneratedNote(
+                        title = resultJson.optString("title", originalTitle),
+                        content = resultJson.optString("content", originalContent)
+                    )
+                } catch (e: Exception) {
+                    // 使用原始内容
+                    GeneratedNote(title = originalTitle, content = content)
+                }
+            }
+
+            return null
+
+        } catch (e: Exception) {
+            Log.e(TAG, "解析优化响应失败", e)
+            return null
+        }
+    }
+
+    /**
+     * 测试连接
+     */
+    suspend fun testConnection(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val testPrompt = "测试连接，请回复'连接成功'"
+            val requestBody = buildRequestBody(testPrompt)
+            val response = executeRequest(requestBody)
+
+            if (!response.isNullOrEmpty()) {
+                val json = JSONObject(response)
+                return@withContext !json.has("error")
+            }
+
+            return@withContext false
+
+        } catch (e: Exception) {
+            Log.e(TAG, "测试连接失败", e)
+            return@withContext false
+        }
     }
 }
 

@@ -4,14 +4,12 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,6 +22,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.edu.tju.notepad.sync.SyncManager
+import cn.edu.tju.notepad.ai.AiConfigManager
+import cn.edu.tju.notepad.ui.AiSettingsDialog
 
 @Composable
 fun UserScreen() {
@@ -42,18 +42,76 @@ fun UserScreen() {
     var showEditDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showSyncSettings by remember { mutableStateOf(false) }
+    var showAiSettings by remember { mutableStateOf(false) }
 
-    // 添加同步管理器
+    // 添加管理器
     val noteDbHelper = remember { NoteDbHelper(context) }
     val syncManager = remember { SyncManager(context, noteDbHelper) }
+    val aiConfigManager = remember { AiConfigManager(context) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 现有的用户信息部分保持不变...
+        // 用户头像
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.Person,
+                contentDescription = "用户头像",
+                modifier = Modifier.size(60.dp),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 用户信息
+        Text(
+            text = username,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = email,
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // 用户信息卡片
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                UserInfoItem(
+                    label = "用户名",
+                    value = username,
+                    icon = Icons.Default.Person
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                UserInfoItem(
+                    label = "邮箱",
+                    value = email,
+                    icon = Icons.Default.Email
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -72,6 +130,44 @@ fun UserScreen() {
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text("编辑个人信息")
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // AI设置按钮
+        OutlinedButton(
+            onClick = { showAiSettings = true },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = if (aiConfigManager.isAiEnabled())
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                else
+                    MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Icon(
+                Icons.Default.AutoAwesome,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = if (aiConfigManager.isAiEnabled())
+                    MaterialTheme.colorScheme.primary
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text("AI智能助手")
+                if (aiConfigManager.isAiEnabled()) {
+                    Text(
+                        "已启用",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -112,21 +208,58 @@ fun UserScreen() {
             Text("关于应用")
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(32.dp))
 
         // 应用版本信息
         Text(
-            text = "记事本应用 v1.1.0 (支持云同步)",
+            text = "智能记事本 v2.0",
             fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = "支持AI生成 · 云同步 · 图片附件",
+            fontSize = 10.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 
-    // 所有对话框...
+    // 编辑用户信息对话框
+    if (showEditDialog) {
+        EditUserInfoDialog(
+            currentUsername = username,
+            currentEmail = email,
+            onDismiss = { showEditDialog = false },
+            onSave = { newUsername, newEmail ->
+                username = newUsername
+                email = newEmail
+                sharedPreferences.edit()
+                    .putString("username", newUsername)
+                    .putString("email", newEmail)
+                    .apply()
+                showEditDialog = false
+            }
+        )
+    }
+
+    // AI设置对话框
+    if (showAiSettings) {
+        AiSettingsDialog(
+            onDismiss = { showAiSettings = false }
+        )
+    }
+
+    // 同步设置对话框
     if (showSyncSettings) {
         SyncSettingsDialog(
             syncManager = syncManager,
             onDismiss = { showSyncSettings = false }
+        )
+    }
+
+    // 关于对话框
+    if (showAboutDialog) {
+        AboutDialog(
+            onDismiss = { showAboutDialog = false }
         )
     }
 }
@@ -238,18 +371,45 @@ fun AboutDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Default.AutoAwesome,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
         title = {
-            Text("关于应用")
+            Text("智能记事本")
         },
         text = {
             Column {
-                Text("记事本应用")
+                Text(
+                    text = "版本: 2.0.0",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("版本: 1.0.0")
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("开发者: TJU")
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("一个简洁易用的记事本应用，支持文字记录和图片添加。")
+                Text("开发者: TJU Team")
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "功能特性：",
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("• AI智能生成与优化笔记")
+                Text("• 支持百度文心一言大模型")
+                Text("• 云端同步，多设备访问")
+                Text("• 图片附件支持")
+                Text("• Markdown格式支持")
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "一个智能、高效、安全的笔记应用，让记录变得更简单。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         },
         confirmButton = {

@@ -30,41 +30,61 @@ class SyncManager(
     }
 
     suspend fun syncNotes(): SyncResult = withContext(Dispatchers.IO) {
-        try {
-            Log.d(TAG, "开始同步笔记")
+        Log.d(TAG, "==================== 开始同步笔记 ====================")
 
-            // 1. 检查网络连接
-            val healthResponse = networkClient.apiService.healthCheck()
-            if (!healthResponse.isSuccessful) {
-                return@withContext SyncResult.Error("服务器连接失败")
+        try {
+            val lastSync = getLastSyncTime()
+            Log.d(TAG, "上次同步时间: $lastSync")
+
+            // === 临时跳过健康检查 ===
+            Log.d(TAG, "⚠️ 跳过健康检查（临时方案）")
+
+            // 直接进行数据同步
+            Log.d(TAG, "步骤1: 开始获取服务端数据...")
+
+            val serverResponse = try {
+                networkClient.apiService.getNotes(lastSync)
+            } catch (e: Exception) {
+                Log.e(TAG, "获取服务端数据异常", e)
+                throw e
             }
 
-            // 2. 获取服务端数据
-            val lastSync = getLastSyncTime()
-            val serverResponse = networkClient.apiService.getNotes(lastSync)
+            Log.d(TAG, "服务端响应码: ${serverResponse.code()}")
+            Log.d(TAG, "服务端响应是否成功: ${serverResponse.isSuccessful}")
 
             if (!serverResponse.isSuccessful) {
-                return@withContext SyncResult.Error("获取服务端数据失败: ${serverResponse.code()}")
+                val errorMsg = "获取服务端数据失败: ${serverResponse.code()}"
+                Log.e(TAG, errorMsg)
+                return@withContext SyncResult.Error(errorMsg)
             }
 
             val noteResponse = serverResponse.body()
-                ?: return@withContext SyncResult.Error("服务端响应为空")
+            if (noteResponse == null) {
+                val errorMsg = "服务端响应体为空"
+                Log.e(TAG, errorMsg)
+                return@withContext SyncResult.Error(errorMsg)
+            }
 
-            // 3. 处理服务端数据
+            Log.d(TAG, "✅ 成功获取服务端数据")
+            Log.d(TAG, "服务端笔记数量: ${noteResponse.notes.size}")
+
+            // 处理数据
             handleServerNotes(noteResponse.notes)
-
-            // 4. 上传本地修改
             uploadLocalChanges()
-
-            // 5. 更新同步时间
             saveLastSyncTime(noteResponse.timestamp)
 
-            Log.d(TAG, "同步完成")
+            Log.d(TAG, "🎉 同步完成!")
             SyncResult.Success
 
         } catch (e: Exception) {
-            Log.e(TAG, "同步失败", e)
-            SyncResult.Error("同步失败: ${e.message}")
+            Log.e(TAG, "💥 同步失败", e)
+            val errorMessage = when (e) {
+                is java.net.UnknownHostException -> "无法解析服务器地址"
+                is java.net.ConnectException -> "无法连接到服务器"
+                is retrofit2.HttpException -> "HTTP错误 ${e.code()}"
+                else -> "同步失败: ${e.message}"
+            }
+            SyncResult.Error(errorMessage)
         }
     }
 

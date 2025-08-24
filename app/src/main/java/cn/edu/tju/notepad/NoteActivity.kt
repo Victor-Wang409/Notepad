@@ -18,9 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import cn.edu.tju.notepad.sync.SyncManager
+import cn.edu.tju.notepad.ai.*
+import cn.edu.tju.notepad.ui.AiGenerationDialog
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -41,6 +41,8 @@ class NoteActivity : ComponentActivity() {
 
     private lateinit var noteDbHelper: NoteDbHelper
     private lateinit var syncManager: SyncManager
+    private lateinit var aiClient: WenxinApiClient
+    private lateinit var aiConfigManager: AiConfigManager
     private var noteBean: NoteBean? = null
     private var comeFrom: String = ""
 
@@ -56,6 +58,8 @@ class NoteActivity : ComponentActivity() {
 
         noteDbHelper = NoteDbHelper(this)
         syncManager = SyncManager(this, noteDbHelper)
+        aiClient = WenxinApiClient(this)
+        aiConfigManager = AiConfigManager(this)
         comeFrom = intent.getStringExtra("ComeFrom") ?: ""
         noteBean = intent.getSerializableExtra("NoteBean", NoteBean::class.java)
 
@@ -70,9 +74,10 @@ class NoteActivity : ComponentActivity() {
                     },
                     onAddImage = { addImage() },
                     onDeleteImage = { imagePath ->
-                        // 处理图片删除
                         deleteImageFile(imagePath)
-                    }
+                    },
+                    aiClient = aiClient,
+                    aiConfigManager = aiConfigManager
                 )
             }
         }
@@ -90,7 +95,6 @@ class NoteActivity : ComponentActivity() {
         try {
             val imagePath = ImageUtils.copyUriToPrivateStorage(this, uri)
             if (imagePath.isNotEmpty()) {
-                // 更新当前笔记的图片路径列表
                 if (noteBean == null) {
                     noteBean = NoteBean(
                         id = 0,
@@ -140,16 +144,13 @@ class NoteActivity : ComponentActivity() {
                     val result = noteDbHelper.insert(newNote)
                     if (result > 0) {
                         Toast.makeText(this, "保存成功", Toast.LENGTH_SHORT).show()
-
-                        // 后台同步（可选）
                         lifecycleScope.launch {
                             try {
                                 syncManager.syncNotes()
                             } catch (e: Exception) {
-                                // 静默处理同步错误，不影响用户体验
+                                // 静默处理同步错误
                             }
                         }
-
                         finish()
                     } else {
                         Toast.makeText(this, "保存失败", Toast.LENGTH_SHORT).show()
@@ -166,22 +167,18 @@ class NoteActivity : ComponentActivity() {
                             note.content = content
                             note.time = currentTime
                             note.imagePaths = imagePaths.toMutableList()
-                            // 标记为已修改，需要同步
                             note.markAsModified()
 
                             val result = noteDbHelper.update(note)
                             if (result > 0) {
                                 Toast.makeText(this, "更新成功", Toast.LENGTH_SHORT).show()
-
-                                // 后台同步（可选）
                                 lifecycleScope.launch {
                                     try {
                                         syncManager.syncNotes()
                                     } catch (e: Exception) {
-                                        // 静默处理同步错误，不影响用户体验
+                                        // 静默处理同步错误
                                     }
                                 }
-
                                 finish()
                             } else {
                                 Toast.makeText(this, "更新失败", Toast.LENGTH_SHORT).show()
@@ -235,14 +232,20 @@ fun NoteEditScreen(
     onBackPressed: () -> Unit,
     onSaveNote: (String, String, List<String>) -> Unit,
     onAddImage: () -> Unit,
-    onDeleteImage: (String) -> Unit
+    onDeleteImage: (String) -> Unit,
+    aiClient: WenxinApiClient,
+    aiConfigManager: AiConfigManager
 ) {
     var title by remember { mutableStateOf(noteBean?.title ?: "") }
     var content by remember { mutableStateOf(noteBean?.content ?: "") }
     var imagePaths by remember { mutableStateOf(noteBean?.imagePaths?.toMutableList() ?: mutableListOf<String>()) }
     var showConfirmDialog by remember { mutableStateOf(false) }
+    var showAiDialog by remember { mutableStateOf(false) }
+    var isGenerating by remember { mutableStateOf(false) }
+    var aiError by remember { mutableStateOf<String?>(null) }
 
-    // 监听noteBean的变化，更新imagePaths
+    val scope = rememberCoroutineScope()
+
     LaunchedEffect(noteBean?.imagePaths) {
         noteBean?.imagePaths?.let { paths ->
             imagePaths = paths.toMutableList()
@@ -265,6 +268,19 @@ fun NoteEditScreen(
                     }
                 },
                 actions = {
+                    // AI按钮 - 只有在配置了API密钥后才显示
+                    if (aiConfigManager.isConfigured() && aiConfigManager.isAiEnabled()) {
+                        IconButton(
+                            onClick = { showAiDialog = true }
+                        ) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = "AI助手",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
                     IconButton(
                         onClick = {
                             if (comeFrom == "NoteAdapter" && noteBean != null) {
@@ -287,11 +303,25 @@ fun NoteEditScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onAddImage,
-                containerColor = MaterialTheme.colorScheme.secondary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "添加图片")
+            Column {
+                // AI快速生成按钮
+                if (aiConfigManager.isConfigured() && aiConfigManager.isAiEnabled()) {
+                    SmallFloatingActionButton(
+                        onClick = { showAiDialog = true },
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = "AI生成")
+                    }
+                }
+
+                // 添加图片按钮
+                FloatingActionButton(
+                    onClick = onAddImage,
+                    containerColor = MaterialTheme.colorScheme.secondary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "添加图片")
+                }
             }
         }
     ) { paddingValues ->
@@ -352,7 +382,62 @@ fun NoteEditScreen(
         }
     }
 
-    // 确认对话框
+    // AI生成对话框
+    if (showAiDialog) {
+        AiGenerationDialog(
+            currentTitle = title,
+            currentContent = content,
+            onDismiss = {
+                showAiDialog = false
+                isGenerating = false
+            },
+            onGenerate = { prompt, style ->
+                scope.launch {
+                    isGenerating = true
+                    aiError = null
+
+                    try {
+                        val result = aiClient.generateNoteContent(prompt, style)
+                        if (result != null) {
+                            title = result.title
+                            content = result.content
+                            showAiDialog = false
+                        } else {
+                            aiError = "生成失败，请检查网络连接和API配置"
+                        }
+                    } catch (e: Exception) {
+                        aiError = "生成出错: ${e.message}"
+                    } finally {
+                        isGenerating = false
+                    }
+                }
+            },
+            onImprove = { improveType ->
+                scope.launch {
+                    isGenerating = true
+                    aiError = null
+
+                    try {
+                        val result = aiClient.improveNoteContent(title, content, improveType)
+                        if (result != null) {
+                            title = result.title
+                            content = result.content
+                            showAiDialog = false
+                        } else {
+                            aiError = "优化失败，请检查网络连接和API配置"
+                        }
+                    } catch (e: Exception) {
+                        aiError = "优化出错: ${e.message}"
+                    } finally {
+                        isGenerating = false
+                    }
+                }
+            },
+            isGenerating = isGenerating
+        )
+    }
+
+    // 确认保存对话框
     if (showConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showConfirmDialog = false },
@@ -376,6 +461,20 @@ fun NoteEditScreen(
                     }
                 ) {
                     Text("不保存")
+                }
+            }
+        )
+    }
+
+    // 错误提示
+    aiError?.let { error ->
+        AlertDialog(
+            onDismissRequest = { aiError = null },
+            title = { Text("AI生成错误") },
+            text = { Text(error) },
+            confirmButton = {
+                TextButton(onClick = { aiError = null }) {
+                    Text("确定")
                 }
             }
         )
